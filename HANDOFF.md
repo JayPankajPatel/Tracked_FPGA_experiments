@@ -1,5 +1,64 @@
 # HANDOFF
 
+## 2026-06-08 — Issue #2: FABulous v2.0.0b5 smoke-validation CI workflow
+
+**Branch:** `feature/2-fabulous-v2-smoke-ci` (off `main`; do not push/merge `main`)
+
+**Goal:** Issue #2 — prove `docs/fabulous-setup-guide.md` is reproducible from a clean GitHub-hosted
+runner by implementing the FABulous `v2.0.0b5` smoke workflow + a findings report. Pin `4a2047b`.
+
+**State:** PR **#5** open; **all gates validated across 4 CI runs.** Summary:
+- **Required `smoke` gate GREEN** on runs #1, #3, #4: T0 (toolchain) + required T1 (fabric gen + artifact
+  gate verifying `eFPGA.v`/`LUT4AB.v`/`LUT4AB_switch_matrix.v`).
+- **Cold vs warm:** first run ~55 min (Nix prep ~54 min: 507 FOSSi cache hits + 252 source builds);
+  **warm run #4 = 3 min 33 s** (Nix prep 176 s) after the store cache persisted — ~18× faster.
+- **Fix applied during validation:** **`actions: write`** so `cache-nix-action` can save the Nix store
+  (was failing → every run cold; now warm).
+- **uv-lean-path: optional, non-gating CI job** (re-added — more signal). Green (run #3, 35 s); with
+  `uv sync --frozen` + `fetch-depth:0` → `FABulous CLI 2.0.0`. Needs `setup-uv@v8.2.0` (no `v8` alias) +
+  `python3-tk` (tkinter). **Limits (findings A11):** installs the current FABulous *frontend* only — **no
+  EDA backend** (yosys/openroad/…); Nix remains the reproducible-backend path.
+- **Findings:** `docs/fabulous-setup-guide-validation.md` §B has all timings, cache analysis, and suggested
+  guide edits (FABulous `--version`→`0.0.0`; cold bring-up is tens of min; consumer needs `actions: write`;
+  uv path needs `python3-tk`).
+- **Remaining (optional):** T2 sky130 tile hardening (`workflow_dispatch`, not a gate) not yet run.
+- **Issue #2:** real CI results recorded — **ready to close on merge** (leave to user; only the user merges `main`).
+
+### Changes made
+- `.github/workflows/fabulous-v2-smoke.yml` (new) — `smoke` job: **T0 (required gate)** = FABulous/yosys/
+  openroad/fab-yosys version checks in the Nix devshell, **T1 (required gate)** = fabric gen **plus a
+  generated-artifact gate** asserting the *generated* (non-template) RTL exists/non-empty:
+  `Fabric/eFPGA.v`, `Tile/LUT4AB/LUT4AB.v`, `Tile/LUT4AB/LUT4AB_switch_matrix.v` (+ `module` content check on
+  the fabric top). Filenames pinned from v2.0.0b5 source (CLI `setWriterOutputFile` paths; `Fabric` default
+  name `eFPGA`; default Verilog writer → `.v`), corroborated by quickstart §5 — not guessed. `uv-lean-path`
+  (optional, non-gating) = `uv sync` + `FABulous --version`; `t2-sky130-tile-hardening` (optional,
+  `workflow_dispatch`-only, not a gate, 360-min timeout) = sky130A tile hardening mirroring upstream
+  `gds-flow-ci.yml` with its manufacturability parser. Pinned to the **full SHA** `4a2047b…68a` with a SHA+tag guard.
+- `docs/fabulous-setup-guide-validation.md` (new) — findings report: §A authoring-stage findings (known now),
+  §B post-CI-run placeholders.
+
+### Central authoring finding
+Upstream's `prepare_nix_environment` is a **repo-local composite action**; a consumer can't reference
+`./.github/actions/...` (resolves to *our* repo). **Chosen fix (Option A):** check FABulous out as the
+**workspace root**, so the composite action + `flake.nix` + `hashFiles` resolve verbatim at the pin. Plain
+`nix develop` works (FOSSi cache trusted via the composite's `nix_conf`; no `--accept-flake-config` needed).
+Full list + suggested guide edits in `docs/fabulous-setup-guide-validation.md` §A.
+
+### Validation run (local, pre-push)
+- `actionlint` + `shellcheck` (downloaded static binaries) on the workflow → **clean (exit 0)** after fixing
+  one SC2295 (quoted inner expansion in the ref-guard prefix match).
+- `python3 -c "yaml.safe_load(...)"` → OK.
+- Note: lint validates syntax/expressions/bash only — **Nix/FABulous semantics are validated only by the CI run.**
+
+### Next recommended action
+1. **User:** push `feature/2-fabulous-v2-smoke-ci` and open a PR linking issues #1 and #2 (agent will not
+   push/PR without explicit approval). PR body must state findings are provisional until the first CI run.
+2. After the first run: fill `docs/fabulous-setup-guide-validation.md` §B (T0 green?, T1 timing, T2 feasibility,
+   cache timings); fold any improvised steps + guide edits (§A1/A2/A4) back into `docs/fabulous-setup-guide.md`.
+3. Optionally trigger T2 via `workflow_dispatch` to assess sky130A tile-hardening feasibility on a stock runner.
+
+---
+
 ## 2026-06-09 — Issue #1 merged; sim/verification toolchain notes follow-up
 
 **Branch:** `update/fabulous-sim-toolchain-notes` (off `main`; do not push/merge `main`)
