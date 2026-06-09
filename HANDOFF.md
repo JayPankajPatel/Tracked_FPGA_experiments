@@ -7,12 +7,19 @@
 **Goal:** Issue #2 — prove `docs/fabulous-setup-guide.md` is reproducible from a clean GitHub-hosted
 runner by implementing the FABulous `v2.0.0b5` smoke workflow + a findings report. Pin `4a2047b`.
 
-**State:** PR **#5** open. **Run #1 (cold) GREEN** — required `smoke` job passed: T0 (7 s) + required T1
-(fabric gen 19 s, artifact gate verified `eFPGA.v`/`LUT4AB.v`/`LUT4AB_switch_matrix.v`). Cold Nix prep
-dominated at ~54 min (507 cache hits + 252 source builds; FOSSi cache lacked some v2.0.0b5-pinned versions).
-`uv-lean-path` failed on `setup-uv@v8` (no `v8` alias) → fixed to `@v8.2.0`; this commit triggers run #2
-(warm-cache + uv re-test). Findings written to `docs/fabulous-setup-guide-validation.md` §B. **Issue #2 not
-closed** until run #2 confirms the warm-cache/uv results. Only the user merges `main`.
+**State:** PR **#5** open; **all gates validated across 4 CI runs.** Summary:
+- **Required `smoke` gate GREEN** on runs #1, #3, #4: T0 (toolchain) + required T1 (fabric gen + artifact
+  gate verifying `eFPGA.v`/`LUT4AB.v`/`LUT4AB_switch_matrix.v`).
+- **Cold vs warm:** first run ~55 min (Nix prep ~54 min: 507 FOSSi cache hits + 252 source builds);
+  **warm run #4 = 3 min 33 s** (Nix prep 176 s) after the store cache persisted — ~18× faster.
+- **Fixes applied during validation:** (1) `setup-uv@v8`→`@v8.2.0` (no `v8` alias); (2) `python3-tk` for
+  `uv sync` (tkinter); (3) **`actions: write`** so `cache-nix-action` can save the Nix store
+  (was failing → every run cold). uv-lean-path now green (35 s).
+- **Findings:** `docs/fabulous-setup-guide-validation.md` §B has all timings, cache analysis, and suggested
+  guide edits (FABulous `--version`→`0.0.0`; cold bring-up is tens of min; consumer needs `actions: write`;
+  uv path needs `python3-tk`).
+- **Remaining (optional):** T2 sky130 tile hardening (`workflow_dispatch`, not a gate) not yet run.
+- **Issue #2:** real CI results recorded — **ready to close on merge** (leave to user; only the user merges `main`).
 
 ### Changes made
 - `.github/workflows/fabulous-v2-smoke.yml` (new) — `smoke` job: **T0 (required gate)** = FABulous/yosys/

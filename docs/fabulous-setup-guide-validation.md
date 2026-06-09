@@ -211,9 +211,30 @@ itself was still cold (~54 min) because it created the cache; the warm benefit l
 **Caveat:** the store is 9.36 GB against a 10 GB cap — close, so future closure growth (or a heavier PDK)
 could exceed it and force cold runs again.
 
-### Still pending
-- [ ] **Warm restore (run #4):** confirm the saved store restores and drops `Prepare Nix environment` to
-      single-digit minutes. *(Triggered by the commit recording this section.)*
+### Warm restore — CONFIRMED (run #4, `27209691622`)
+The follow-up `push` run restored the saved store cache and **collapsed the Nix prep from ~54 min to
+~3 min** — full step breakdown:
+
+| Step | Cold (run #1/#3) | Warm (run #4) |
+|------|------------------|----------------|
+| Checkout + reproducibility guard | ~10 s | ~9 s |
+| **Prepare Nix environment** | **~3262 s (~54 min)** | **176 s (~3 min)** |
+| T0 toolchain (required) | 7 s | 5 s |
+| T1 fabric gen + verify (required) | 19 s | 16 s |
+| **Total `smoke` job** | **~55 min** | **3 min 33 s** |
+
+≈ **18× faster** Nix prep warm vs cold. **Net validation story:** first clean bring-up on a repo is ~tens
+of minutes (cold, with some FOSSi-cache-miss source builds); every subsequent run on the same `flake.lock`
+is **~3–4 min** as long as the store cache fits under the 10 GB cap (currently 9.36 GB — close).
+
+### Final status — all required + optional gates validated
+- ✅ **T0 (required):** green on runs #1, #3, #4.
+- ✅ **T1 (required):** green on runs #1, #3, #4; artifact gate verified `eFPGA.v` / `LUT4AB.v` /
+  `LUT4AB_switch_matrix.v` each time.
+- ✅ **uv-lean-path (optional):** green on run #3 (after `setup-uv@v8.2.0` + `python3-tk`).
+- ✅ **Cache persistence:** fixed via `actions: write`; warm restore measured (run #4).
+- ⏭️ **T2 sky130 tile hardening (optional, manual):** still **not yet run** — `workflow_dispatch` only,
+  `timeout-minutes: 360`. Trigger on demand to measure feasibility / Antenna-LVS-DRC on a stock runner.
 - [x] **uv-lean-path green (run #3, `27189437632`):** ✅ with `python3-tk` the job is green in **35 s** —
       `Resolved 109 packages`, `Installed 106 packages`, `FABulous CLI 0.1`. (Note: uv reports `0.1`, the
       Nix devshell reports `0.0.0` — different build provenance; neither reflects the `v2.0.0b5` tag, so the
