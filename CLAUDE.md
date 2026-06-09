@@ -65,7 +65,7 @@ Contains local work and experiments involving OpenFPGA, FABulous, OpenLane, Libr
 
 - `CLAUDE.md`: Initial instruction file.
 - `docs/`: Setup, teardown, usage notes, fixes, and project documentation.
-- `FABulous_work/`: Fabric definition and generation work.
+- `FABulous_work/`: Fabric definition, generation work, clean FABulous checkouts/worktrees, local FABulous environments, generated demo projects, and smoke-test workspaces for this project. Do not use `/home/jay/Repos/FABulous` as the working environment for this project.
 - `HANDOFF.md`: Running project log. Read this before starting a session and update it at the end. It should describe project state, changes made, open questions, and next actions.
 - `Librelane_work/`: ASIC implementation and flow work targeting SkyWater 130nm.
 - `README.md`: General project overview. Currently sparse, but should be populated over time.
@@ -123,7 +123,7 @@ Prefer checked-out project documentation and local source files before relying o
 Use references in this order:
 
 1. Documentation, source files, scripts, configs, examples, and `HANDOFF.md` in the current repo.
-2. Documentation, source files, scripts, configs, and examples in checked-out dependency/tool repos, especially FABulous, OpenFPGA, OpenLane, LibreLane, and SkyWater PDK repos.
+2. Documentation, source files, scripts, configs, and examples in checked-out dependency/tool repos, especially FABulous, OpenFPGA, OpenLane, LibreLane, and SkyWater PDK repos. Treat `/home/jay/Repos/FABulous` as read-only reference context only; it may contain local Docker/Nix/experiment state that should not define this project's setup.
 3. Current project wiki notes in `~/wiki/fpga_stochastic_blocks/`, starting with `~/wiki/fpga_stochastic_blocks/index.md`.
 4. Relevant reusable notes in `~/wiki/fpga/` and `~/wiki/fpga_tapeout/`.
 5. Official upstream documentation found through search.
