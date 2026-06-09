@@ -201,12 +201,23 @@ grant `actions: write`** or the store cache never persists and every run is cold
   install (alongside `iverilog`). **Suggested guide edit:** §3b's uv path needs `iverilog` **and**
   `python3-tk` as extra system packages.
 
-### Still pending (run #3 onward)
-- [ ] **Cache save (run #3):** with `actions: write`, confirm the store cache now persists
-      (repo `actions/caches` `total_count` → ≥1 after the post step).
-- [ ] **Warm restore (run #4):** confirm a subsequent run restores the store and drops
-      `Prepare Nix environment` to single-digit minutes (or document the 10 G cap preventing it).
-- [ ] **uv-lean-path green (run #3):** confirm `uv sync` + `FABulous --version` succeed with `python3-tk`.
+### Cache persistence — FIXED and confirmed (run #3, `27189437632`)
+With `actions: write` added, run #3's `Post Prepare Nix environment` **saved the store cache**: the purge
+step now succeeds (no "Resource not accessible by integration"), and the repo's Actions caches went
+**`total_count: 0 → 4`** — the Nix store cache `nix-Linux-c4b7f70b…` persisted at **3.01 GB compressed**
+(uncompressed store **9.36 GB**, just under the composite's `gc-max-store-size-linux: 10G` cap) under both
+`refs/pull/5/merge` and `refs/heads/feature/2-fabulous-v2-smoke-ci` (plus the small `setup-uv` cache). Run #3
+itself was still cold (~54 min) because it created the cache; the warm benefit lands on the next run.
+**Caveat:** the store is 9.36 GB against a 10 GB cap — close, so future closure growth (or a heavier PDK)
+could exceed it and force cold runs again.
+
+### Still pending
+- [ ] **Warm restore (run #4):** confirm the saved store restores and drops `Prepare Nix environment` to
+      single-digit minutes. *(Triggered by the commit recording this section.)*
+- [x] **uv-lean-path green (run #3, `27189437632`):** ✅ with `python3-tk` the job is green in **35 s** —
+      `Resolved 109 packages`, `Installed 106 packages`, `FABulous CLI 0.1`. (Note: uv reports `0.1`, the
+      Nix devshell reports `0.0.0` — different build provenance; neither reflects the `v2.0.0b5` tag, so the
+      checkout guard remains the real pin.)
 - [ ] **T2 feasibility:** trigger sky130A tile hardening via `workflow_dispatch`; record wall-clock and
       Antenna/LVS/DRC counts, or document infeasibility within `timeout-minutes: 360`.
 - [ ] **Recommended guide edits:** consolidated list — A1, A2, A4, A8, plus run-#1/#2 findings (FABulous
