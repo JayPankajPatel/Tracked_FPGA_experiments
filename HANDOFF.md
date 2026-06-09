@@ -8,9 +8,9 @@
 setup guide + minimal smoke-test sequence + a drafted follow-up GitHub Actions validation issue.
 Research/docs only: no install, no smoke-test run, no generated project, no CI workflow in this issue.
 
-**State:** Decision **signed off → `v2.0.0b5`** (user-confirmed 2026-06-08). All docs committed.
-**Issue #2 created** → https://github.com/JayPankajPatel/Tracked_FPGA_experiments/issues/2. PR being opened
-against `main` linking #1/#2.
+**State:** ✅ Issue #1 work complete. Decision **`v2.0.0b5`** (user-confirmed 2026-06-08).
+**Issue #2** posted (…/issues/2). **PR #3** open against `main` (…/pull/3), closes #1 — awaiting user review/merge.
+Only the user merges/pushes `main`.
 
 ### Changes made
 - `docs/fabulous-version-decision.md` (new) — full evidence, comparison table, decision record
