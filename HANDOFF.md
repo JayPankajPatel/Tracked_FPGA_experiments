@@ -1,5 +1,30 @@
 # HANDOFF
 
+## 2026-06-09 — Issue #1 merged; sim/verification toolchain notes follow-up
+
+**Branch:** `update/fabulous-sim-toolchain-notes` (off `main`; do not push/merge `main`)
+
+**State:** PR #3 (issue #1) **merged** into `main` (merge `c73468e`, 2026-06-09); issue #1 **closed**.
+Issue #2 (CI validation) remains **open**. This follow-up captures verification-toolchain decisions made
+during PR #3 review that were not in the merge.
+
+### Changes made
+- `docs/fabulous-setup-guide.md` — reframe uv as the lean RTL-iteration path; new §5 "Simulation &
+  verification strategy (tool-agnostic)"; renumbered Caveats→§6, References→§7.
+
+### Decisions recorded
+- **Verification = pytest + cocotb** (directed + Python golden-model over a random pool). Constrained-random
+  (Hypothesis) and functional coverage (cocotb-coverage) **deferred** — they layer on the same base, no rework.
+- **Sims tool-agnostic** via cocotb `SIM=` (Questa/VCS/Xcelium); bundled iverilog/NVC/GHDL are defaults, not locks.
+- **uv now** (lean RTL-gen iteration) / **Nix later** (tapeout/GDS).
+
+### Next recommended action
+1. Review & merge the `update/fabulous-sim-toolchain-notes` PR (only the user merges `main`).
+2. Issue #2: a separate agent implements the clean-room CI validation workflow.
+3. (Optional) delete the merged `feature/1-choose-fabulous-version` branch.
+
+---
+
 ## 2026-06-08 — Issue #1: Choose FABulous version/ref
 
 **Branch:** `feature/1-choose-fabulous-version` (off `main`; do not push/merge `main`)
@@ -8,9 +33,8 @@
 setup guide + minimal smoke-test sequence + a drafted follow-up GitHub Actions validation issue.
 Research/docs only: no install, no smoke-test run, no generated project, no CI workflow in this issue.
 
-**State:** ✅ Issue #1 work complete. Decision **`v2.0.0b5`** (user-confirmed 2026-06-08).
-**Issue #2** posted (…/issues/2). **PR #3** open against `main` (…/pull/3), closes #1 — awaiting user review/merge.
-Only the user merges/pushes `main`.
+**State:** ✅ Issue #1 complete; **PR #3 merged 2026-06-09** (merge `c73468e`), issue #1 closed.
+Decision **`v2.0.0b5`**. **Issue #2** open (…/issues/2). Follow-up notes in `update/fabulous-sim-toolchain-notes`.
 
 ### Changes made
 - `docs/fabulous-version-decision.md` (new) — full evidence, comparison table, decision record
