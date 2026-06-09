@@ -8,16 +8,17 @@
 setup guide + minimal smoke-test sequence + a drafted follow-up GitHub Actions validation issue.
 Research/docs only: no install, no smoke-test run, no generated project, no CI workflow in this issue.
 
-**State:** Decision **signed off → `v2.0.0b5`** (user-confirmed 2026-06-08). Decision doc + setup guide
-committed (`8dc9ef4`, `1c267b8`). Issue #2 draft written, **pending user review** before `gh issue create`.
-PR not yet opened.
+**State:** Decision **signed off → `v2.0.0b5`** (user-confirmed 2026-06-08). All docs committed.
+**Issue #2 created** → https://github.com/JayPankajPatel/Tracked_FPGA_experiments/issues/2. PR being opened
+against `main` linking #1/#2.
 
 ### Changes made
 - `docs/fabulous-version-decision.md` (new) — full evidence, comparison table, decision record
   (chosen ref `v2.0.0b5`), headline risk (external backend), §8 risks/unknowns.
 - `docs/fabulous-setup-guide.md` (new) — clean-room contract, Nix/uv/Docker install paths for `v2.0.0b5`,
   tiered smoke T0/T1/T2 (sourced from upstream `.github/workflows`). Clean-room grep audit: PASS.
-- `docs/followup-issue-2-ci-validation.md` (new) — DRAFT of issue #2 (CI validation), pending review.
+- `docs/followup-issue-2-ci-validation.md` (new) — issue #2 (CI validation) source/record; **posted as GitHub #2**.
+- Created triage labels: `fabric`, `sky130`, `experiment`, `needs-review`.
 - `HANDOFF.md` (this file).
 
 ### Key evidence (verified)
@@ -38,10 +39,10 @@ read `~/wiki/fpga_tapeout/...` notes; `grep` of `/home/jay/Repos/sky130-fabulous
 
 ### Open questions
 1. ~~Ref sign-off~~ → **RESOLVED: `v2.0.0b5`** (2026-06-08).
-2. **Issue #2 draft:** awaiting user review/iteration before creation on GitHub.
+2. ~~Issue #2 draft review~~ → **RESOLVED: posted as #2** (2026-06-08).
 3. Built-in v2.0 GDS flow vs external `librelane_plugin_fabulous` backend (separate decision; not resolved in #1).
 
 ### Next recommended action
-1. Iterate `docs/followup-issue-2-ci-validation.md` with user; when agreed, `gh issue create` (link #1).
-2. Push `feature/1-choose-fabulous-version`; open PR linking #1 (and #2 once created). Do not merge `main`.
+1. **PR open** against `main` linking #1/#2 — user reviews & merges (only the user merges/pushes `main`).
+2. After merge, the issue #2 agent implements the clean-room CI validation workflow.
 3. (Optional) promote decision to `~/wiki/fpga_stochastic_blocks/decision_logs/` + update its index.

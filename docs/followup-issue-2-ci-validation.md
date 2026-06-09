@@ -1,7 +1,8 @@
-# DRAFT — Follow-up Issue #2 (for review)
+# Follow-up Issue #2 — CI validation of the setup guide (POSTED)
 
-> **Status:** Draft for user review. Becomes GitHub issue #2 once approved. **Not yet created on GitHub.**
-> Iterate on this file; when agreed, it is posted via `gh issue create` and linked to issue #1.
+> **Status:** ✅ Posted as GitHub issue **#2** on 2026-06-08 —
+> https://github.com/JayPankajPatel/Tracked_FPGA_experiments/issues/2
+> This file is the source/record; make any further changes on the live issue.
 
 ---
 
