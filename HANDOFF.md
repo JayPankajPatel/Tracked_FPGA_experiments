@@ -8,11 +8,16 @@
 setup guide + minimal smoke-test sequence + a drafted follow-up GitHub Actions validation issue.
 Research/docs only: no install, no smoke-test run, no generated project, no CI workflow in this issue.
 
-**State:** Research complete. Decision doc written with recommendation **pending user sign-off**.
+**State:** Decision **signed off → `v2.0.0b5`** (user-confirmed 2026-06-08). Decision doc + setup guide
+committed (`8dc9ef4`, `1c267b8`). Issue #2 draft written, **pending user review** before `gh issue create`.
+PR not yet opened.
 
 ### Changes made
-- `docs/fabulous-version-decision.md` (new) — full evidence, comparison table, recommendation
-  (`v2.0.0b5`, pending sign-off), headline risk, decision record.
+- `docs/fabulous-version-decision.md` (new) — full evidence, comparison table, decision record
+  (chosen ref `v2.0.0b5`), headline risk (external backend), §8 risks/unknowns.
+- `docs/fabulous-setup-guide.md` (new) — clean-room contract, Nix/uv/Docker install paths for `v2.0.0b5`,
+  tiered smoke T0/T1/T2 (sourced from upstream `.github/workflows`). Clean-room grep audit: PASS.
+- `docs/followup-issue-2-ci-validation.md` (new) — DRAFT of issue #2 (CI validation), pending review.
 - `HANDOFF.md` (this file).
 
 ### Key evidence (verified)
@@ -32,10 +37,11 @@ Research/docs only: no install, no smoke-test run, no generated project, no CI w
 read `~/wiki/fpga_tapeout/...` notes; `grep` of `/home/jay/Repos/sky130-fabulous-testchip` flake/.gitmodules (read-only).
 
 ### Open questions
-1. **Ref sign-off:** `v2.0.0b5` (adopt v2.0 now, accept beta) vs `v1.3.1` (stable-first, migrate later). Decision axis = timeline.
-2. Built-in v2.0 GDS flow vs external `librelane_plugin_fabulous` backend (separate decision; not resolved in #1).
+1. ~~Ref sign-off~~ → **RESOLVED: `v2.0.0b5`** (2026-06-08).
+2. **Issue #2 draft:** awaiting user review/iteration before creation on GitHub.
+3. Built-in v2.0 GDS flow vs external `librelane_plugin_fabulous` backend (separate decision; not resolved in #1).
 
 ### Next recommended action
-1. Get ref sign-off (AskUserQuestion). 2. Write `docs/fabulous-setup-guide.md` for the chosen ref
-(Nix devshell + tiered smoke T0/T1/T2). 3. Draft `docs/followup-issue-2-ci-validation.md`, iterate, then `gh issue create`.
-4. Update this file, commit, open PR linking #1. 5. (Optional) promote decision to `~/wiki/fpga_stochastic_blocks/decision_logs/`.
+1. Iterate `docs/followup-issue-2-ci-validation.md` with user; when agreed, `gh issue create` (link #1).
+2. Push `feature/1-choose-fabulous-version`; open PR linking #1 (and #2 once created). Do not merge `main`.
+3. (Optional) promote decision to `~/wiki/fpga_stochastic_blocks/decision_logs/` + update its index.
