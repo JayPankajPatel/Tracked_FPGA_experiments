@@ -12,9 +12,12 @@ runner by implementing the FABulous `v2.0.0b5` smoke workflow + a findings repor
   gate verifying `eFPGA.v`/`LUT4AB.v`/`LUT4AB_switch_matrix.v`).
 - **Cold vs warm:** first run ~55 min (Nix prep ~54 min: 507 FOSSi cache hits + 252 source builds);
   **warm run #4 = 3 min 33 s** (Nix prep 176 s) after the store cache persisted — ~18× faster.
-- **Fixes applied during validation:** (1) `setup-uv@v8`→`@v8.2.0` (no `v8` alias); (2) `python3-tk` for
-  `uv sync` (tkinter); (3) **`actions: write`** so `cache-nix-action` can save the Nix store
-  (was failing → every run cold). uv-lean-path now green (35 s).
+- **Fix applied during validation:** **`actions: write`** so `cache-nix-action` can save the Nix store
+  (was failing → every run cold; now warm).
+- **uv lean path: removed from CI** (frontend-only, non-gating). Validated once (`uv sync --frozen` + full
+  clone → `FABulous CLI 2.0.0`), now a documented manual procedure with limits (findings A11): installs the
+  current FABulous *frontend* but **no EDA backend** — Nix is the reproducible-backend path. Needed
+  `setup-uv@v8.2.0` (no `v8` alias) + `python3-tk` (tkinter) while it was a job.
 - **Findings:** `docs/fabulous-setup-guide-validation.md` §B has all timings, cache analysis, and suggested
   guide edits (FABulous `--version`→`0.0.0`; cold bring-up is tens of min; consumer needs `actions: write`;
   uv path needs `python3-tk`).

@@ -51,7 +51,7 @@ that the CI/composite path does not need it.
 ### A3. `iverilog` is an extra system package, not in the Nix devshell by default *(confirmed, minor)*
 
 Per `pytest_testing.yml` (`additional_system_packages: iverilog`) and guide §1/§3b, the simulation/test
-path needs `iverilog` installed separately. The optional `uv-lean-path` job installs it via `apt`. The
+path needs `iverilog` installed separately (the manual uv procedure in A11 installs it via `apt`). The
 Nix devshell provides `nvc`/`ghdl` (and the guide's §5 sim strategy is tool-agnostic via cocotb `SIM=`),
 so T0/T1 do not need `iverilog`; only the uv/pytest path does. Matches the guide — recorded for completeness.
 
@@ -82,7 +82,7 @@ is therefore a required hard gate in the `smoke` job** — it is the first step 
 functionality (CSV parse → switch-matrix generation → tile assembly → fabric stitching). T1 should be
 demoted to best-effort *only if an actual CI run shows it is too slow/flaky on a stock runner*; no such
 run has happened yet, so it is required. T2 (sky130 tile hardening) remains optional/`workflow_dispatch`
-and non-gating; the `uv-lean-path` job remains optional/non-gating.
+and non-gating; the uv lean path is **not a CI job** (documented manual procedure — A11).
 
 ### A7. T1 verifies specific *generated* (non-template) artifacts — exit 0 is not enough *(hardening)*
 
@@ -127,40 +127,48 @@ deferred, consistent with guide §5 ("constrained-random / functional coverage d
   fails if any fail.
 - **T1 (required gate):** fabric generation + generated-artifact verification (A6/A7) in the same job,
   reusing the warm devshell. A hard gate — it is the minimum FABulous functionality smoke.
-- **uv-lean-path (optional, non-gating):** `uv sync` + `FABulous --version`.
+- **uv lean path:** **not a CI job** — documented as a manual procedure with limits (A11).
 - **T2 (optional, dispatch-only, not a gate):** sky130A tile hardening, `timeout-minutes: 360`, upstream
   manufacturability parser reused verbatim.
 
-### A11. uv path = reproducible *frontend*, NOT a reproducible *backend* *(reproducibility scope)*
+### A11. uv "lean path" — manual procedure + limits (intentionally NOT a CI job)
 
-Verified from the run #3 uv log + v2.0.0b5 `pyproject.toml`:
-- `pyproject.toml`: `name = "FABulous-FPGA"`, `dynamic = ["version"]` (version derived from VCS tags),
-  `dependencies = ["FABulous-bit-gen>=0.2.0", …]`.
-- uv builds the **core tool from the local v2.0.0b5 checkout** —
-  `Building fabulous-fpga @ file:///…/Tracked_FPGA_experiments` — *not* from PyPI and *not* an old release.
-  Helper packages resolve from PyPI/git at the versions the committed `uv.lock` pins (e.g.
-  `fabulous-bit-gen==0.2.0`, `sdf-timing` @ a pinned git SHA).
+**Decision:** the uv path is **not** run in CI. It exercises only the Python *frontend* (no EDA backend)
+and is not a validation gate, so spending CI cycles on it isn't worth it. It was validated **once** during
+this PR and is recorded here as a **manual, on-demand procedure with explicit limits**.
 
-So the uv-installed **FABulous frontend is current (v2.0.0b5)**, contrary to the "uv installs the old
-toolchain" worry — *for the Python tool*. The `FABulous CLI 0.1` it reported (vs the Nix devshell's
-`0.0.0`) is a **shallow-checkout artifact**: with no tags fetched, the dynamic version falls back to `0.1`
-(Nix's pure build falls back to `0.0.0`); same source, two "no tag found" fallbacks, neither the real tag.
+**How to run it locally (if/when you want the lean RTL-iteration path):**
+```sh
+# Python frontend only — does NOT install yosys/openroad/nextpnr/ghdl/klayout.
+sudo apt-get install -y iverilog python3-tk          # iverilog: sim; python3-tk: uv sync needs tkinter
+git clone --branch v2.0.0b5 https://github.com/FPGA-Research/FABulous.git
+cd FABulous
+uv sync --frozen                                     # install EXACTLY the committed uv.lock; no re-resolve
+uv run FABulous --version                            # -> "FABulous CLI 2.0.0" (full clone => correct tag)
+```
 
-**Where the worry is real — the EDA backend.** `uv sync` installs **only Python packages**; it provides
-**no `yosys` / `openroad` / `nextpnr` / `ghdl` / `klayout`**. Anything past pure Python RTL generation
-(synthesis, simulation, GDS) would fall back to whatever EDA tools are on the system `PATH` — on a clean
-runner that is **absent or an uncontrolled apt version**. That is the genuine reproducibility hole: the uv
-path **cannot** pin the backend; **Nix is the reproducible-backend path** (it pins the entire EDA stack).
+**What it installs (verified — run #3 uv log + v2.0.0b5 `pyproject.toml`):**
+- `pyproject.toml`: `name = "FABulous-FPGA"`, `dynamic = ["version"]`, `dependencies = ["FABulous-bit-gen>=0.2.0", …]`.
+- uv builds the **core tool from the local v2.0.0b5 checkout** (`Building fabulous-fpga @ file:///…`) —
+  **not** from PyPI, **not** an old release. Helper packages come from PyPI/git at the versions the
+  committed `uv.lock` pins (e.g. `fabulous-bit-gen==0.2.0`, `sdf-timing` @ a pinned git SHA).
+- So the uv-installed **frontend is current (v2.0.0b5)**, refuting "uv installs the old toolchain" *for the
+  Python tool*. (The earlier `FABulous CLI 0.1` was a **shallow-checkout artifact** — no tags fetched →
+  dynamic version fell back to `0.1`; the Nix pure build falls back to `0.0.0`. A **full clone reports the
+  real `2.0.0`.**)
 
-**Reproducibility hardening applied to the uv job:**
-- `uv sync --frozen` — install *exactly* the versions in the committed `uv.lock`; never re-resolve or
-  mutate the lockfile. Makes the Python frontend install deterministic.
-- `fetch-depth: 0` on the uv checkout — full tags so the dynamic version self-reports `v2.0.0b5` rather
-  than the `0.1` fallback (traceability).
+**Limits — why it is not a reproducible substitute for Nix:**
+- **No EDA backend.** `uv sync` installs only Python packages — **no `yosys`/`openroad`/`nextpnr`/`ghdl`/
+  `klayout`**. Anything past pure Python RTL generation (synthesis, simulation, GDS) falls back to whatever
+  EDA tools are on the system `PATH` — on a clean machine that is **absent or an uncontrolled apt version**.
+  The uv path **cannot pin the backend**; **Nix is the reproducible-backend path** (it pins the whole stack).
+- **Reproducible only with care:** use `uv sync --frozen` (exact `uv.lock`, no re-resolution) and a
+  **full clone** (so the version self-reports correctly). Even then, reproducibility covers the *frontend
+  only*.
 
-**Suggested guide edit:** state plainly that the uv path is reproducible for the FABulous *Python frontend
-only* (via `uv.lock` + `uv sync --frozen`) and provides **no EDA backend** — use the Nix devshell for any
-reproducible synthesis/P&R/GDS work.
+**Suggested guide edit (§3b):** present uv as a *frontend-only, lean RTL-iteration* path — reproducible via
+`uv.lock` + `uv sync --frozen` + full clone — that installs **no EDA backend**; direct all reproducible
+synthesis/P&R/GDS work to the Nix devshell. Note the extra system packages: `iverilog` **and** `python3-tk`.
 
 ---
 
@@ -223,14 +231,19 @@ warm subsequent runs. **Suggested guide edit:** state that (a) the first clean N
 minutes (cold, with some source builds), not "minutes"; and (b) a consumer mirroring the composite **must
 grant `actions: write`** or the store cache never persists and every run is cold.
 
-### uv-lean-path (non-gating): two sequential failures, both fixed
+### uv lean path — validated once, then removed from CI (now manual; see A11)
+> The uv path was briefly a CI job while we shook it out; it is **no longer a CI job** (frontend-only,
+> non-gating — not worth CI cycles). The findings below are why, and they feed the manual procedure in A11.
 - **Run #1:** `astral-sh/setup-uv@v8` failed to resolve in ~3 s (*"unable to find version `v8`"*) — the
   action publishes **no floating `v8` major alias** (highest is `v7`; latest release `v8.2.0`). **Fix:** pin
   the exact release `@v8.2.0`. *(Lesson: don't assume a `vN` major alias exists for a marketplace action.)*
 - **Run #2:** with `setup-uv` resolved, **`uv sync` failed: `ModuleNotFoundError: No module named 'tkinter'`**
-  — the FABulous Python env needs the `python3-tk` system package. **Fix:** add `python3-tk` to the apt
-  install (alongside `iverilog`). **Suggested guide edit:** §3b's uv path needs `iverilog` **and**
-  `python3-tk` as extra system packages.
+  — the FABulous Python env needs the `python3-tk` system package. **Fix:** `python3-tk` alongside `iverilog`.
+- **Run #3:** green in 35 s; built `fabulous-fpga` from the local v2.0.0b5 source (frontend current).
+- **Final check:** with `uv sync --frozen` + a full clone, `FABulous --version` self-reported the real
+  **`FABulous CLI 2.0.0`** (vs the `0.1` shallow-checkout fallback). **Then the job was removed** — these
+  facts now live in A11 as a documented manual procedure with limits. **Suggested guide edit:** §3b's uv
+  path needs `iverilog` **and** `python3-tk`, and is reproducible (frontend only) via `uv.lock` + `--frozen`.
 
 ### Cache persistence — FIXED and confirmed (run #3, `27189437632`)
 With `actions: write` added, run #3's `Post Prepare Nix environment` **saved the store cache**: the purge
@@ -258,23 +271,21 @@ The follow-up `push` run restored the saved store cache and **collapsed the Nix 
 of minutes (cold, with some FOSSi-cache-miss source builds); every subsequent run on the same `flake.lock`
 is **~3–4 min** as long as the store cache fits under the 10 GB cap (currently 9.36 GB — close).
 
-### Final status — all required + optional gates validated
+### Final status
 - ✅ **T0 (required):** green on runs #1, #3, #4.
 - ✅ **T1 (required):** green on runs #1, #3, #4; artifact gate verified `eFPGA.v` / `LUT4AB.v` /
   `LUT4AB_switch_matrix.v` each time.
-- ✅ **uv-lean-path (optional):** green on run #3 (after `setup-uv@v8.2.0` + `python3-tk`).
-- ✅ **Cache persistence:** fixed via `actions: write`; warm restore measured (run #4).
-- ⏭️ **T2 sky130 tile hardening (optional, manual):** still **not yet run** — `workflow_dispatch` only,
+- ✅ **Cache persistence:** fixed via `actions: write`; warm restore measured (run #4 — Nix prep
+  ~54 min cold → 176 s warm; total smoke job 3 min 33 s).
+- 📄 **uv lean path:** validated once (frontend `FABulous CLI 2.0.0` via `uv sync --frozen` + full clone),
+  then **removed from CI** — now a documented manual procedure with limits (A11). Frontend-only; no EDA
+  backend; Nix is the reproducible-backend path.
+- ⏭️ **T2 sky130 tile hardening (optional, manual):** **not yet run** — `workflow_dispatch` only,
   `timeout-minutes: 360`. Trigger on demand to measure feasibility / Antenna-LVS-DRC on a stock runner.
-- [x] **uv-lean-path green (run #3, `27189437632`):** ✅ with `python3-tk` the job is green in **35 s** —
-      `Resolved 109 packages`, `Installed 106 packages`, `FABulous CLI 0.1`. (Note: uv reports `0.1`, the
-      Nix devshell reports `0.0.0` — different build provenance; neither reflects the `v2.0.0b5` tag, so the
-      checkout guard remains the real pin.)
-- [ ] **T2 feasibility:** trigger sky130A tile hardening via `workflow_dispatch`; record wall-clock and
-      Antenna/LVS/DRC counts, or document infeasibility within `timeout-minutes: 360`.
-- [ ] **Recommended guide edits:** consolidated list — A1, A2, A4, A8, plus run-#1/#2 findings (FABulous
-      reports `0.0.0`; first cold Nix bring-up is tens of minutes with source builds; mirroring the Nix
-      composite needs `actions: write` for cache persistence; uv path needs `python3-tk`) — for a follow-up
+- [ ] **Recommended guide edits:** consolidated list — A1, A2, A4, A8, A11, plus run-#1/#2 findings
+      (FABulous `--version` self-report depends on clone depth — `2.0.0` full / `0.1` shallow / `0.0.0`
+      Nix; first cold Nix bring-up is tens of minutes with source builds; mirroring the Nix composite needs
+      `actions: write` for cache persistence; uv path needs `iverilog` + `python3-tk`) — for a follow-up
       `docs` PR.
 
 ### Triage note (carried): if a future run fails, do not reflexively weaken T1
