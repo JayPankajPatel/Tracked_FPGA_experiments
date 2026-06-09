@@ -78,14 +78,26 @@ nix --accept-flake-config develop --command bash -c "FABulous --version"
 - **Free disk space** (the action removes dotnet/android/ghc/hostedtoolcache — the EDA closure is large).
 - Cache the Nix store (`nix-community/cache-nix-action@v7`), then warm the shell: `nix develop --command true`.
 
-### 3b. uv / PyPI (Python tool only — no EDA stack, no GDS)
+### 3b. uv / PyPI (Python *frontend* only — no EDA stack, no GDS)
 
 ```sh
-uv sync                        # installs from pyproject.toml + uv.lock
+sudo apt-get install -y iverilog python3-tk   # extra system pkgs (see note below)
+uv sync --frozen               # install EXACTLY the committed uv.lock — no re-resolve
 uv run FABulous --version
 ```
 
-Reference: `.github/workflows/pytest_testing.yml` (`uv run pytest …`, `additional_system_packages: iverilog`).
+This installs the FABulous Python **frontend** from the pinned source (a full clone reports the real
+`v2.0.0b5`; a shallow clone falls back to a placeholder version). It installs **no EDA backend**
+(`yosys`/`openroad`/`nextpnr`/`ghdl`/`klayout`) — anything past pure Python RTL generation (synthesis,
+simulation, GDS) falls back to whatever tools are on the system `PATH`. **For reproducible
+synthesis/P&R/GDS use the Nix devshell (§3a).** Reproducibility here covers the frontend only, via
+`uv.lock` + `uv sync --frozen` + a full clone.
+
+Extra system packages: **`iverilog`** (simulation, per `pytest_testing.yml`) and **`python3-tk`**
+(`uv sync` fails with `ModuleNotFoundError: No module named 'tkinter'` without it).
+
+Reference: `.github/workflows/pytest_testing.yml` (`uv run pytest …`, `additional_system_packages: iverilog`);
+validated in `docs/fabulous-setup-guide-validation.md` §A11.
 
 ### 3c. Docker (optional, encapsulated)
 
