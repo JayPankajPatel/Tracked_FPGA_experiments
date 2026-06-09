@@ -190,6 +190,9 @@ jobs:
         with:
           repository: FPGA-Research/FABulous
           ref: ${{ env.FAB_REF }}
+          # Full history/tags so the dynamic (VCS-derived) version resolves to v2.0.0b5
+          # instead of a "no tag found" fallback (0.1). Aids traceability/reproducibility.
+          fetch-depth: 0
 
       - name: Install extra system packages (iverilog per pytest_testing.yml; python3-tk for uv sync)
         shell: bash
@@ -208,7 +211,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          uv sync
+          # --frozen: install EXACTLY the versions in the committed uv.lock; never re-resolve
+          # or update the lockfile. Reproducible Python *frontend* only — uv installs no EDA
+          # backend (yosys/openroad/nextpnr/ghdl); for a reproducible backend use the Nix path.
+          uv sync --frozen
           uv run FABulous --version
 
   # ---------------------------------------------------------------------------

@@ -131,6 +131,37 @@ deferred, consistent with guide §5 ("constrained-random / functional coverage d
 - **T2 (optional, dispatch-only, not a gate):** sky130A tile hardening, `timeout-minutes: 360`, upstream
   manufacturability parser reused verbatim.
 
+### A11. uv path = reproducible *frontend*, NOT a reproducible *backend* *(reproducibility scope)*
+
+Verified from the run #3 uv log + v2.0.0b5 `pyproject.toml`:
+- `pyproject.toml`: `name = "FABulous-FPGA"`, `dynamic = ["version"]` (version derived from VCS tags),
+  `dependencies = ["FABulous-bit-gen>=0.2.0", …]`.
+- uv builds the **core tool from the local v2.0.0b5 checkout** —
+  `Building fabulous-fpga @ file:///…/Tracked_FPGA_experiments` — *not* from PyPI and *not* an old release.
+  Helper packages resolve from PyPI/git at the versions the committed `uv.lock` pins (e.g.
+  `fabulous-bit-gen==0.2.0`, `sdf-timing` @ a pinned git SHA).
+
+So the uv-installed **FABulous frontend is current (v2.0.0b5)**, contrary to the "uv installs the old
+toolchain" worry — *for the Python tool*. The `FABulous CLI 0.1` it reported (vs the Nix devshell's
+`0.0.0`) is a **shallow-checkout artifact**: with no tags fetched, the dynamic version falls back to `0.1`
+(Nix's pure build falls back to `0.0.0`); same source, two "no tag found" fallbacks, neither the real tag.
+
+**Where the worry is real — the EDA backend.** `uv sync` installs **only Python packages**; it provides
+**no `yosys` / `openroad` / `nextpnr` / `ghdl` / `klayout`**. Anything past pure Python RTL generation
+(synthesis, simulation, GDS) would fall back to whatever EDA tools are on the system `PATH` — on a clean
+runner that is **absent or an uncontrolled apt version**. That is the genuine reproducibility hole: the uv
+path **cannot** pin the backend; **Nix is the reproducible-backend path** (it pins the entire EDA stack).
+
+**Reproducibility hardening applied to the uv job:**
+- `uv sync --frozen` — install *exactly* the versions in the committed `uv.lock`; never re-resolve or
+  mutate the lockfile. Makes the Python frontend install deterministic.
+- `fetch-depth: 0` on the uv checkout — full tags so the dynamic version self-reports `v2.0.0b5` rather
+  than the `0.1` fallback (traceability).
+
+**Suggested guide edit:** state plainly that the uv path is reproducible for the FABulous *Python frontend
+only* (via `uv.lock` + `uv sync --frozen`) and provides **no EDA backend** — use the Nix devshell for any
+reproducible synthesis/P&R/GDS work.
+
 ---
 
 ## B. First-CI-run results (run #1 — cold cache)
