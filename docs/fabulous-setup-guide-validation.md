@@ -51,7 +51,7 @@ that the CI/composite path does not need it.
 ### A3. `iverilog` is an extra system package, not in the Nix devshell by default *(confirmed, minor)*
 
 Per `pytest_testing.yml` (`additional_system_packages: iverilog`) and guide §1/§3b, the simulation/test
-path needs `iverilog` installed separately (the manual uv procedure in A11 installs it via `apt`). The
+path needs `iverilog` installed separately (the `uv-lean-path` job installs it via `apt`; see A11). The
 Nix devshell provides `nvc`/`ghdl` (and the guide's §5 sim strategy is tool-agnostic via cocotb `SIM=`),
 so T0/T1 do not need `iverilog`; only the uv/pytest path does. Matches the guide — recorded for completeness.
 
@@ -82,7 +82,7 @@ is therefore a required hard gate in the `smoke` job** — it is the first step 
 functionality (CSV parse → switch-matrix generation → tile assembly → fabric stitching). T1 should be
 demoted to best-effort *only if an actual CI run shows it is too slow/flaky on a stock runner*; no such
 run has happened yet, so it is required. T2 (sky130 tile hardening) remains optional/`workflow_dispatch`
-and non-gating; the uv lean path is **not a CI job** (documented manual procedure — A11).
+and non-gating; the `uv-lean-path` job is optional/non-gating (frontend only — A11).
 
 ### A7. T1 verifies specific *generated* (non-template) artifacts — exit 0 is not enough *(hardening)*
 
@@ -127,17 +127,18 @@ deferred, consistent with guide §5 ("constrained-random / functional coverage d
   fails if any fail.
 - **T1 (required gate):** fabric generation + generated-artifact verification (A6/A7) in the same job,
   reusing the warm devshell. A hard gate — it is the minimum FABulous functionality smoke.
-- **uv lean path:** **not a CI job** — documented as a manual procedure with limits (A11).
+- **uv-lean-path (optional, non-gating CI job):** `uv sync --frozen` + `FABulous --version`; frontend
+  only, no EDA backend (A11).
 - **T2 (optional, dispatch-only, not a gate):** sky130A tile hardening, `timeout-minutes: 360`, upstream
   manufacturability parser reused verbatim.
 
-### A11. uv "lean path" — manual procedure + limits (intentionally NOT a CI job)
+### A11. uv "lean path" — optional CI job + limits
 
-**Decision:** the uv path is **not** run in CI. It exercises only the Python *frontend* (no EDA backend)
-and is not a validation gate, so spending CI cycles on it isn't worth it. It was validated **once** during
-this PR and is recorded here as a **manual, on-demand procedure with explicit limits**.
+The uv path runs as an **optional, non-gating CI job** (`uv-lean-path`, `continue-on-error`) — more
+signal is better, and it cheaply proves the lean Python *frontend* installs and runs. It is **not** a
+required gate (it covers only the frontend, no EDA backend). Same procedure runs locally:
 
-**How to run it locally (if/when you want the lean RTL-iteration path):**
+**How to run it locally (the lean RTL-iteration path):**
 ```sh
 # Python frontend only — does NOT install yosys/openroad/nextpnr/ghdl/klayout.
 sudo apt-get install -y iverilog python3-tk          # iverilog: sim; python3-tk: uv sync needs tkinter
@@ -231,19 +232,17 @@ warm subsequent runs. **Suggested guide edit:** state that (a) the first clean N
 minutes (cold, with some source builds), not "minutes"; and (b) a consumer mirroring the composite **must
 grant `actions: write`** or the store cache never persists and every run is cold.
 
-### uv lean path — validated once, then removed from CI (now manual; see A11)
-> The uv path was briefly a CI job while we shook it out; it is **no longer a CI job** (frontend-only,
-> non-gating — not worth CI cycles). The findings below are why, and they feed the manual procedure in A11.
+### uv-lean-path (optional, non-gating CI job): two failures shaken out, now green
 - **Run #1:** `astral-sh/setup-uv@v8` failed to resolve in ~3 s (*"unable to find version `v8`"*) — the
   action publishes **no floating `v8` major alias** (highest is `v7`; latest release `v8.2.0`). **Fix:** pin
   the exact release `@v8.2.0`. *(Lesson: don't assume a `vN` major alias exists for a marketplace action.)*
 - **Run #2:** with `setup-uv` resolved, **`uv sync` failed: `ModuleNotFoundError: No module named 'tkinter'`**
   — the FABulous Python env needs the `python3-tk` system package. **Fix:** `python3-tk` alongside `iverilog`.
 - **Run #3:** green in 35 s; built `fabulous-fpga` from the local v2.0.0b5 source (frontend current).
-- **Final check:** with `uv sync --frozen` + a full clone, `FABulous --version` self-reported the real
-  **`FABulous CLI 2.0.0`** (vs the `0.1` shallow-checkout fallback). **Then the job was removed** — these
-  facts now live in A11 as a documented manual procedure with limits. **Suggested guide edit:** §3b's uv
-  path needs `iverilog` **and** `python3-tk`, and is reproducible (frontend only) via `uv.lock` + `--frozen`.
+- **Reproducibility hardening:** `uv sync --frozen` (exact `uv.lock`) + `fetch-depth: 0` (full tags) →
+  `FABulous --version` self-reports the real **`FABulous CLI 2.0.0`** (vs the `0.1` shallow-checkout
+  fallback). **Suggested guide edit:** §3b's uv path needs `iverilog` **and** `python3-tk`, and is
+  reproducible (frontend only) via `uv.lock` + `uv sync --frozen` + a full clone.
 
 ### Cache persistence — FIXED and confirmed (run #3, `27189437632`)
 With `actions: write` added, run #3's `Post Prepare Nix environment` **saved the store cache**: the purge
@@ -277,9 +276,8 @@ is **~3–4 min** as long as the store cache fits under the 10 GB cap (currently
   `LUT4AB_switch_matrix.v` each time.
 - ✅ **Cache persistence:** fixed via `actions: write`; warm restore measured (run #4 — Nix prep
   ~54 min cold → 176 s warm; total smoke job 3 min 33 s).
-- 📄 **uv lean path:** validated once (frontend `FABulous CLI 2.0.0` via `uv sync --frozen` + full clone),
-  then **removed from CI** — now a documented manual procedure with limits (A11). Frontend-only; no EDA
-  backend; Nix is the reproducible-backend path.
+- ✅ **uv-lean-path (optional CI job):** green (run #3, 35 s; with `--frozen` + full clone →
+  `FABulous CLI 2.0.0`). Frontend-only; **no EDA backend** — Nix is the reproducible-backend path (A11).
 - ⏭️ **T2 sky130 tile hardening (optional, manual):** **not yet run** — `workflow_dispatch` only,
   `timeout-minutes: 360`. Trigger on demand to measure feasibility / Antenna-LVS-DRC on a stock runner.
 - [ ] **Recommended guide edits:** consolidated list — A1, A2, A4, A8, A11, plus run-#1/#2 findings

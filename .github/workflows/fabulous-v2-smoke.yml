@@ -175,11 +175,49 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # NOTE: the optional uv "lean path" is intentionally NOT a CI job. It is a Python *frontend*
-  # only (no EDA backend) and is not a validation gate, so we do not spend CI cycles on it. It
-  # was validated once during this PR (uv sync --frozen -> "FABulous CLI 2.0.0") and is now
-  # documented as a manual procedure (with its limits) in
-  # docs/fabulous-setup-guide-validation.md §A11 — run it locally if/when you want it.
+  # ---------------------------------------------------------------------------
+  # Optional lean path: uv / PyPI (guide §3b). Non-gating (continue-on-error) — proves the
+  # FABulous Python *frontend* installs + runs without the heavy Nix EDA closure. NOTE: this
+  # path installs NO EDA backend (yosys/openroad/nextpnr/ghdl); for reproducible synthesis/
+  # P&R/GDS use the Nix devshell. See findings §A11 for the full limits.
+  # ---------------------------------------------------------------------------
+  uv-lean-path:
+    name: uv lean path (optional)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - name: Checkout FABulous at the pinned ref
+        uses: actions/checkout@v6
+        with:
+          repository: FPGA-Research/FABulous
+          ref: ${{ env.FAB_REF }}
+          # Full history/tags so the dynamic (VCS-derived) version resolves to v2.0.0b5
+          # instead of a "no tag found" fallback (0.1). Aids traceability/reproducibility.
+          fetch-depth: 0
+
+      - name: Install extra system packages (iverilog per pytest_testing.yml; python3-tk for uv sync)
+        shell: bash
+        run: |
+          sudo apt-get update
+          # iverilog: simulation per pytest_testing.yml.
+          # python3-tk: `uv sync` fails with "No module named 'tkinter'" without it (run #2 finding).
+          sudo apt-get install -y iverilog python3-tk
+
+      - name: Set up uv
+        # Pin to an exact release: astral-sh/setup-uv publishes no floating `v8` major alias
+        # (highest major alias is v7), so `@v8` fails to resolve. See findings §B.
+        uses: astral-sh/setup-uv@v8.2.0
+
+      - name: uv sync + FABulous --version
+        shell: bash
+        run: |
+          set -euo pipefail
+          # --frozen: install EXACTLY the versions in the committed uv.lock; never re-resolve
+          # or update the lockfile. Reproducible Python *frontend* only — uv installs no EDA
+          # backend (yosys/openroad/nextpnr/ghdl); for a reproducible backend use the Nix path.
+          uv sync --frozen
+          uv run FABulous --version
 
   # ---------------------------------------------------------------------------
   # T2 — sky130 tile hardening. OPTIONAL, workflow_dispatch only, NOT a gate.

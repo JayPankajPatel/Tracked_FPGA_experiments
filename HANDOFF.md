@@ -14,10 +14,10 @@ runner by implementing the FABulous `v2.0.0b5` smoke workflow + a findings repor
   **warm run #4 = 3 min 33 s** (Nix prep 176 s) after the store cache persisted — ~18× faster.
 - **Fix applied during validation:** **`actions: write`** so `cache-nix-action` can save the Nix store
   (was failing → every run cold; now warm).
-- **uv lean path: removed from CI** (frontend-only, non-gating). Validated once (`uv sync --frozen` + full
-  clone → `FABulous CLI 2.0.0`), now a documented manual procedure with limits (findings A11): installs the
-  current FABulous *frontend* but **no EDA backend** — Nix is the reproducible-backend path. Needed
-  `setup-uv@v8.2.0` (no `v8` alias) + `python3-tk` (tkinter) while it was a job.
+- **uv-lean-path: optional, non-gating CI job** (re-added — more signal). Green (run #3, 35 s); with
+  `uv sync --frozen` + `fetch-depth:0` → `FABulous CLI 2.0.0`. Needs `setup-uv@v8.2.0` (no `v8` alias) +
+  `python3-tk` (tkinter). **Limits (findings A11):** installs the current FABulous *frontend* only — **no
+  EDA backend** (yosys/openroad/…); Nix remains the reproducible-backend path.
 - **Findings:** `docs/fabulous-setup-guide-validation.md` §B has all timings, cache analysis, and suggested
   guide edits (FABulous `--version`→`0.0.0`; cold bring-up is tens of min; consumer needs `actions: write`;
   uv path needs `python3-tk`).
