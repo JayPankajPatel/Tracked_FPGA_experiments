@@ -133,19 +133,77 @@ deferred, consistent with guide §5 ("constrained-random / functional coverage d
 
 ---
 
-## B. Post-first-CI-run findings (to be filled after the user pushes the branch)
+## B. First-CI-run results (run #1 — cold cache)
 
-> Fill these in from the first Actions run on `feature/2-fabulous-v2-smoke-ci` / the PR.
+**Run:** Actions run `27186515258` (PR #5, `pull_request` on `feature/2-fabulous-v2-smoke-ci`),
+ubuntu-latest. **Result: `smoke` job GREEN** (T0 + required T1 both passed). 2026-06-09.
 
-- [ ] **T0 result:** green/red; versions printed for FABulous / yosys / openroad / fab-yosys.
-- [ ] **Nix setup time:** cold vs warm (cache-nix-action) store-restore timing; any disk-space pressure.
-- [ ] **FOSSi cache:** confirmed substituter hit (tools fetched, not rebuilt from source)?
-- [ ] **T1 result + timing:** did fabric generation complete on a stock runner? wall-clock. Did the
-      artifact gate pass — were `Fabric/eFPGA.v`, `Tile/LUT4AB/LUT4AB.v`, `Tile/LUT4AB/LUT4AB_switch_matrix.v`
-      produced at the expected paths/extension (or did the real tree differ, e.g. `.vhdl`)? If T1 proves
-      too slow/flaky on a stock runner, this is where we record evidence to demote it to best-effort.
-- [ ] **uv-lean-path:** did `uv sync` + `FABulous --version` succeed; time; any extra system packages needed.
-- [ ] **T2 feasibility:** on `workflow_dispatch`, did sky130A tile hardening finish within `timeout-minutes`?
-      wall-clock; Antenna/LVS/DRC pass counts; or document why infeasible on GitHub-hosted runners.
-- [ ] **Improvised steps:** anything added that the guide does not state → fold back into §A and the guide.
-- [ ] **Recommended guide edits:** consolidated list (A1, A2, A4, A8 at minimum) for a follow-up `docs` PR.
+### Per-step timing (run #1, cold)
+
+| Step | Duration | Note |
+|------|----------|------|
+| Checkout FABulous @ full SHA + reproducibility guard | ~10 s | guard passed (HEAD `4a2047b…`, `git describe` = `v2.0.0b5`) |
+| **Prepare Nix environment** | **~3262 s (≈54 min)** | dominates wall-clock; see cache analysis below |
+| **T0** toolchain present (required) | **7 s** | |
+| **T1** fabric generation (required) | **19 s** | pure Python RTL generation — trivially fast |
+| **T1** artifact verification (required) | **<1 s** | |
+
+**Total wall-clock ≈ 55 min**, of which **~98 % is the one-time cold Nix build**; actual FABulous
+functionality (T1) is **19 s**.
+
+### ✅ T0 result (PASS)
+Printed in the devshell: `FABulous CLI 0.0.0`, `Yosys 0.62` (`yosys --version`), and
+`fab-yosys -m ghdl -p help` listed the `ghdl` + `synth_fabulous` plugins (Yosys 0.65). `openroad -version`
+ran clean (step exit 0). **Finding:** `FABulous --version` reports **`0.0.0`** (version not stamped in the
+build) — so the **checkout SHA/tag guard is what actually pins the ref**, not the tool's self-report. The
+guide should not suggest verifying the version via `FABulous --version`.
+
+### ✅ T1 result (PASS) — artifact paths were correct
+The pinned artifact paths matched the real v2.0.0b5 output exactly:
+```
+OK: test_project/Fabric/eFPGA.v (12792 lines)
+OK: test_project/Tile/LUT4AB/LUT4AB.v (2299 lines)
+OK: test_project/Tile/LUT4AB/LUT4AB_switch_matrix.v (4278 lines)
+T1 artifact verification passed
+```
+Default writer is Verilog (`.v`) as predicted (A8); the fabric top is a real 12.8k-line netlist. T1 is
+**fast (19 s)** and stays a **required** gate — no evidence it is too slow/flaky (the slowness is entirely
+in environment prep, not in FABulous).
+
+### Nix setup time + FOSSi cache (the real cost) — *hidden assumption surfaced*
+The `Prepare Nix environment` step was a **mix of cache hits and source builds**: **507** `copying path …
+from nix-cache.fossi-foundation.org` (cache hits) **+ 252** `building '/nix/store/…drv'` (source builds).
+The FOSSi cache served the heavy base but **not the exact pinned versions** in v2.0.0b5's `flake.lock` —
+source-built packages included `ghdl-bin-6.0.0` (cache had `5.1.1`), `klayout-0.30.8`, `nextpnr-unstable`,
+`fab-yosys`, the `openroad-…-python3-env` wrapper, and FABulous's own wheels (`fabulous-bit-gen`,
+`fabulous-fasm`). Those 252 builds are why run #1 (~54 min) **exceeded upstream `nix-env.yml`'s own
+partial-cold baseline (~25 min)** and warm baseline (2–4 min).
+
+**Self-healing expectation:** the source-built paths are saved into this repo's `cache-nix-action` store
+cache, so run #2 (same `flake.lock` hash) should restore them and collapse toward the single-digit-minute
+range. *(To be confirmed by run #2 — triggered by the follow-up commit that also fixes uv.)* **Caveat
+(A-class):** the upstream composite caps the store cache at `gc-max-store-size-linux: 10G`; if the full
+EDA closure exceeds that, run #2 may not be fully warm. **Suggested guide edit:** state plainly that the
+first clean Nix bring-up is ~tens of minutes (cold, with some source builds), not "minutes," and is
+amortized by the store cache on subsequent runs.
+
+### ❌ → fixed: uv-lean-path (non-gating) failed on run #1
+`astral-sh/setup-uv@v8` failed to resolve in ~3 s: *"Unable to resolve action … unable to find version
+`v8`"*. The action publishes **no floating `v8` major alias** (highest major alias is `v7`; latest release
+is `v8.2.0`). **Fix:** pin the exact release `astral-sh/setup-uv@v8.2.0`. This is a reproducibility lesson
+in itself — do not assume a `vN` major alias exists for a marketplace action; verify or pin the exact tag.
+*(uv path functional result — `uv sync` + `FABulous --version` — to be confirmed on run #2.)*
+
+### Still pending
+- [ ] **Run #2 (warm cache):** confirm the store-cache restore drops `Prepare Nix environment` to
+      single-digit minutes (or document the 10 G cap preventing it); confirm `uv-lean-path` is green.
+- [ ] **T2 feasibility:** trigger sky130A tile hardening via `workflow_dispatch`; record wall-clock and
+      Antenna/LVS/DRC counts, or document infeasibility within `timeout-minutes: 360`.
+- [ ] **Recommended guide edits:** consolidated list — A1, A2, A4, A8, plus the new run-#1 findings
+      (FABulous reports `0.0.0`; first cold Nix bring-up is tens of minutes with source builds) — for a
+      follow-up `docs` PR.
+
+### Triage note (carried): if a future run fails, do not reflexively weaken T1
+Diagnose first as one of: real guide/setup bug · incorrect artifact-path assumption · FABulous v2.0.0b5
+behavior mismatch · GitHub runner resource/time issue. Run #1 evidence shows T1 itself is 19 s, so a future
+red is far more likely an environment/runner issue than a T1-functionality problem.

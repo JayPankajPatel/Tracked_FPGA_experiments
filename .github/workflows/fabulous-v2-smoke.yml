@@ -193,7 +193,9 @@ jobs:
           sudo apt-get install -y iverilog
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v8
+        # Pin to an exact release: astral-sh/setup-uv publishes no floating `v8` major alias
+        # (highest major alias is v7), so `@v8` fails to resolve. See findings §B.
+        uses: astral-sh/setup-uv@v8.2.0
 
       - name: uv sync + FABulous --version
         shell: bash

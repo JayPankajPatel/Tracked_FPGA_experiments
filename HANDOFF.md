@@ -7,9 +7,12 @@
 **Goal:** Issue #2 — prove `docs/fabulous-setup-guide.md` is reproducible from a clean GitHub-hosted
 runner by implementing the FABulous `v2.0.0b5` smoke workflow + a findings report. Pin `4a2047b`.
 
-**State:** Workflow + findings authored and lint-clean. **Runtime validation pending the first CI run**
-(GitHub Actions can't run locally; only the user pushes/opens PRs). Branch **not pushed**, PR **not opened**
-(both gated on user approval).
+**State:** PR **#5** open. **Run #1 (cold) GREEN** — required `smoke` job passed: T0 (7 s) + required T1
+(fabric gen 19 s, artifact gate verified `eFPGA.v`/`LUT4AB.v`/`LUT4AB_switch_matrix.v`). Cold Nix prep
+dominated at ~54 min (507 cache hits + 252 source builds; FOSSi cache lacked some v2.0.0b5-pinned versions).
+`uv-lean-path` failed on `setup-uv@v8` (no `v8` alias) → fixed to `@v8.2.0`; this commit triggers run #2
+(warm-cache + uv re-test). Findings written to `docs/fabulous-setup-guide-validation.md` §B. **Issue #2 not
+closed** until run #2 confirms the warm-cache/uv results. Only the user merges `main`.
 
 ### Changes made
 - `.github/workflows/fabulous-v2-smoke.yml` (new) — `smoke` job: **T0 (required gate)** = FABulous/yosys/
