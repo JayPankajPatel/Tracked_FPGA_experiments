@@ -81,7 +81,7 @@ From the upstream README (`v2.0.0b5`):
 
 > **"Active Development — Use Tagged Releases for Production"** … **"For production use, please use [tagged releases](https://github.com/FPGA-Research/FABulous/releases) or reach out to us for further advice."**
 
-Reading: among the candidates, `v1.3.1` and `v2.0.0b5` are both **tagged releases** (the guidance is satisfied by either); `main` is **not**. This is the actual maintainer guidance — note that `~/wiki/fpga_tapeout/mentor-mir-outreach.md` is about an unrelated SJSU applications mentor (Prof. Mir), **not** FABulous maintainer advice, and is deliberately *not* cited as such.
+Reading: among the candidates, `v1.3.1` and `v2.0.0b5` are both **tagged releases** (the guidance is satisfied by either); `main` is **not**. This is the actual maintainer guidance — a local wiki note whose title hinted at mentorship/outreach turned out to concern an unrelated *applications* mentor, **not** FABulous maintainer advice, and is deliberately *not* cited as such.
 
 ## 6. "Silicon-proven" framing — lineage-level, not ref-level
 

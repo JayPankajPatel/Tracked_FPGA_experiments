@@ -58,14 +58,25 @@ git describe --tags            # expect: v2.0.0b5
 
 ### 3a. Nix devshell (canonical, required for GDS)
 
+> **Binary cache is essential — do not skip.** The upstream `flake.nix` declares extra substituters
+> (`nixConfig`, pointing at the **FOSSi Foundation Nix cache**). On a clean machine you **must** accept or
+> preconfigure them, or Nix rebuilds the EDA stack (OpenROAD, Yosys, …) **from source — hours, not minutes**,
+> and may hang on an interactive "accept flake config?" prompt. Either pass `--accept-flake-config` (accepts
+> the flake's declared cache) **or** configure the cache globally as the CI action does.
+
 ```sh
-nix develop                    # builds/enters the flake devshell with FABulous + EDA tools
+nix --accept-flake-config develop                       # enter devshell (tools fetched from FOSSi cache)
 # or run a single command without an interactive shell:
-nix develop --command bash -c "FABulous --version"
+nix --accept-flake-config develop --command bash -c "FABulous --version"
 ```
 
-The upstream CI reference for this path is `.github/workflows/nix-env.yml` (uses the composite action
-`.github/actions/prepare_nix_environment`, then `nix develop --command …`).
+**Authoritative CI pattern** — mirror `.github/actions/prepare_nix_environment/action.yaml` (used by
+`nix-env.yml` and `gds-flow-ci.yml`):
+- Install Nix with `nixbuild/nix-quick-install-action@v34` (Nix `2.31.2`), setting `nix_conf`:
+  - `substituters = https://cache.nixos.org https://nix-cache.fossi-foundation.org`
+  - `extra-trusted-public-keys = nix-cache.fossi-foundation.org:3+K59iFwXqKsL7BNu6Guy0v+uTlwsxYQxjspXzqLYQs=`
+- **Free disk space** (the action removes dotnet/android/ghc/hostedtoolcache — the EDA closure is large).
+- Cache the Nix store (`nix-community/cache-nix-action@v7`), then warm the shell: `nix develop --command true`.
 
 ### 3b. uv / PyPI (Python tool only — no EDA stack, no GDS)
 
@@ -88,17 +99,17 @@ Run in order; stop at the tier that matches your goal. T0–T1 are light; T2 is 
 ### T0 — Toolchain present (seconds–minutes)
 Straight from `nix-env.yml`; proves the devshell exposes the toolchain.
 ```sh
-nix develop --command bash -c "FABulous --version"
-nix develop --command bash -c "yosys --version"
-nix develop --command bash -c "openroad -version"
-nix develop --command bash -c "fab-yosys -m ghdl -p help"
+nix --accept-flake-config develop --command bash -c "FABulous --version"
+nix --accept-flake-config develop --command bash -c "yosys --version"
+nix --accept-flake-config develop --command bash -c "openroad -version"
+nix --accept-flake-config develop --command bash -c "fab-yosys -m ghdl -p help"
 ```
 **Pass:** all four print versions / help without error.
 
 ### T1 — Fabric generation (minutes)
 Proves the core FABulous tool generates a fabric (no EDA hardening).
 ```sh
-nix develop --command bash -c "
+nix --accept-flake-config develop --command bash -c "
   set -e
   FABulous create-project test_project
   FABulous --project-dir test_project run 'run_FABulous_fabric'
@@ -110,7 +121,7 @@ nix develop --command bash -c "
 ### T2 — sky130 tile hardening (stretch; tens of minutes–hours, needs Nix + PDK)
 Proves the integrated GDS flow on one PDK. Mirrors `gds-flow-ci.yml` (tile-hardening job).
 ```sh
-nix develop --command bash -c "
+nix --accept-flake-config develop --command bash -c "
   set -e
   FABulous create-project test_project
   sed -i \"s/FAB_PDK=.*/FAB_PDK='sky130A'/\" test_project/.FABulous/.env
@@ -138,6 +149,7 @@ nix develop --command bash -c "
 ## 6. Authoritative upstream references (at the pinned ref)
 
 - `.github/workflows/nix-env.yml` — T0 env smoke (canonical).
+- `.github/actions/prepare_nix_environment/action.yaml` — **authoritative** Nix install + FOSSi binary-cache + disk-free pattern; mirror this for any clean CI.
 - `.github/workflows/gds-flow-ci.yml` — T2 tile-hardening + fabric-stitching flow and PDK matrix.
 - `.github/workflows/pytest_testing.yml` — uv-based install + test path.
 - `docs/source/getting_started/` — `installation/`, `quickstart.md`, `codespaces.md`, `index.md`.

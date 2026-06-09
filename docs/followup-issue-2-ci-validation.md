@@ -50,8 +50,9 @@ no smoke run). This issue is where the install + smoke test actually run, in cle
 
 1. A workflow in this repo, e.g. `.github/workflows/fabulous-v2-smoke.yml`, that:
    - checks out / clones FABulous at `v2.0.0b5`,
-   - establishes the Nix flake devshell on the runner (install Nix with flakes; a public Nix-setup Action is
-     acceptable — record which one you chose, since the guide does not pin one),
+   - establishes the Nix flake devshell on the runner by **mirroring `.github/actions/prepare_nix_environment`**
+     — install Nix, **configure the FOSSi cache `nix-cache.fossi-foundation.org` as a substituter** (required,
+     or the EDA stack rebuilds from source for hours), free disk space, and cache the Nix store,
    - runs **T0 (toolchain present)** as the **required** gate:
      `FABulous --version`, `yosys --version`, `openroad -version`, `fab-yosys -m ghdl -p help`,
    - runs **T1 (fabric generation)** if feasible on a stock runner:
