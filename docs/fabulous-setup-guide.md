@@ -34,7 +34,7 @@ Pick one environment path:
 | Path | Provides | Use when |
 |------|----------|----------|
 | **Nix flake devshell** (canonical) | FABulous + Yosys + nextpnr + OpenROAD + GHDL/NVC | Full flow incl. GDS/tile hardening |
-| **uv / PyPI** | FABulous Python tool + CLI only (no EDA tools) | Fabric definition / generation / CLI / tests |
+| **uv / PyPI** | FABulous Python tool + CLI only (no EDA tools) | **Lean, fast RTL-generation iteration**; fabric def/gen, CLI, sims/tests (tapeout tools come later via Nix) |
 | **Docker image** (nix-based, added in b5) | Encapsulated all-in-one | Reproducible runs without host Nix |
 | **Devcontainer / Codespaces** | VS Code dev env | Cloud / onboarding |
 
@@ -136,7 +136,24 @@ nix --accept-flake-config develop --command bash -c "
 > `gds-flow-ci.yml` **skips sky130A fabric stitching** on GitHub runners ("will get kill by github").
 > Run sky130 fabric stitching on a larger machine (e.g., HPC), not stock CI.
 
-## 5. Caveats / known risks (see decision doc §8)
+## 5. Simulation & verification strategy (tool-agnostic)
+
+**Chosen approach: pytest + cocotb.** Sufficient for block-level verification against a decent random pool;
+**constrained-random (Hypothesis) and functional coverage (cocotb-coverage) are deferred** until edge cases
+warrant — they layer on the same pytest+cocotb base with no rework.
+
+**Simulation is tool-agnostic.** FABulous verification is cocotb-driven (the v2.0 suite is "pytest + cocotb");
+cocotb selects the simulator at runtime via `SIM=`, so the same testbenches run on commercial simulators
+(Questa/ModelSim, VCS, Xcelium) as on the bundled open-source ones (`iverilog`, `NVC`/`GHDL`). The bundled
+sims are **defaults, not locks** (v2.0 added a flexible simulation command, #623). Custom stochastic-block
+RTL is standard HDL — simulate it with any tool.
+
+- **Layered roles:** cocotb = HDL testbench (drives/monitors the DUT, picks `SIM=`); pytest = runner /
+  reporter / orchestrator (runs cocotb sims + Python golden-model checks, aggregates pass/fail + coverage).
+- **Coverage caution:** upstream CI's `--cov=fabulous` gate is *code* coverage of the Python tool, **not**
+  RTL *functional* coverage (that is cocotb-coverage, deferred).
+
+## 6. Caveats / known risks (see decision doc §8)
 
 - **Nix is mandatory for the GDS flow.** The uv path stops at fabric generation.
 - **sky130 fabric-stitch is too heavy for stock GitHub runners** (tile hardening is OK; lighter PDKs
@@ -146,7 +163,7 @@ nix --accept-flake-config develop --command bash -c "
   (`mole99/librelane_plugin_fabulous` + `mole99/fabulous-tiles` + LibreLane v3.0.0) is *not* exercised by
   this guide. Whether v2.0.0b5 artifacts feed that backend is unverified (decision doc §8.1).
 
-## 6. Authoritative upstream references (at the pinned ref)
+## 7. Authoritative upstream references (at the pinned ref)
 
 - `.github/workflows/nix-env.yml` — T0 env smoke (canonical).
 - `.github/actions/prepare_nix_environment/action.yaml` — **authoritative** Nix install + FOSSi binary-cache + disk-free pattern; mirror this for any clean CI.
