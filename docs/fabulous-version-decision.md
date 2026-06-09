@@ -3,14 +3,14 @@
 **Issue:** #1 — Choose FABulous version/ref for this project
 **Branch:** `feature/1-choose-fabulous-version`
 **Date:** 2026-06-08
-**Status:** ⏳ **Recommendation PENDING USER SIGN-OFF** (evidence complete; final ref is the user's call)
+**Status:** ✅ **SIGNED OFF (2026-06-08) — chosen ref: `v2.0.0b5`** (commit `4a2047b`)
 **Canonical upstream:** `https://github.com/FPGA-Research/FABulous` (the older `FPGA-Research-Manchester/FABulous` URL redirects here)
 
 ---
 
 ## TL;DR
 
-**Recommended default ref: `v2.0.0b5`** (latest tagged release), *pending sign-off*.
+**Chosen default ref: `v2.0.0b5`** (latest tagged release) — *user-confirmed 2026-06-08*.
 
 The decision is fundamentally a **timeline choice**, not a quality ranking:
 
@@ -119,9 +119,12 @@ So: **the FABulous *framework* is silicon-proven (notably the SOFA series on sky
 - Upstream README @ v2.0.0b5: silicon-proven framing + "use tagged releases" guidance + disclaimer.
 - Local wiki (paths only; summarized): `~/wiki/fpga_tapeout/decision_logs/librelane-fabulous-known-good-backend-2026-05-16.md`, `~/wiki/fpga_tapeout/handoffs/librelane-fabulous-container-handoff-2026-05-24.md`, `~/wiki/fpga_tapeout/openlane/fabulous_flat_smoke_2026_05_15.md`, `~/wiki/fpga_tapeout/openlane/fabulous-experiment-repo-migration.md`.
 
-## 10. Decision record (to be completed at sign-off)
+## 10. Decision record
 
-- [ ] **Chosen ref:** ________ (`v2.0.0b5` recommended / `v1.3.1` stable-first / other)
-- [ ] **Chosen on (date):** ________
-- [ ] **Rationale (timeline stance):** ________
-- [ ] Setup guide (`docs/fabulous-setup-guide.md`) updated to the chosen ref.
+- [x] **Chosen ref:** `v2.0.0b5` (commit `4a2047b`) — recommended option, user-confirmed.
+- [x] **Chosen on:** 2026-06-08.
+- [x] **Rationale (timeline stance):** *Adopt v2.0 now* — align with active development and the
+  v2.0-line GDS/LibreLane/sky130 direction rather than incur a larger migration later; it is the latest
+  tagged release (honors maintainer guidance) and dominates the local `v2.0.0b4`. Beta status and v2.0
+  API churn are accepted; the built-in-vs-external GDS-backend question (§8.1) remains open.
+- [x] Setup guide (`docs/fabulous-setup-guide.md`) targets `v2.0.0b5`.
