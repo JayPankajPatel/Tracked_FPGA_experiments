@@ -1,0 +1,308 @@
+# FABulous v2.0.0b5 clean-environment smoke validation (issue #2).
+#
+# Validates that docs/fabulous-setup-guide.md is reproducible from a clean GitHub-hosted
+# runner. The setup guide is the spec; this workflow is its execution counterpart.
+#
+# Design note (recorded as a finding in docs/fabulous-setup-guide-validation.md):
+#   Upstream FABulous reuses Nix setup via `uses: ./.github/actions/prepare_nix_environment`,
+#   a *repo-local* composite action. A consumer repo cannot reference that `./`-relative path
+#   (it resolves to THIS repo). We therefore check FABulous out AS THE WORKSPACE ROOT so the
+#   composite action, `flake.nix`, and `hashFiles('flake.nix','flake.lock')` all resolve
+#   verbatim at the pinned ref. This repo's own files are not needed in these jobs — the smoke
+#   validates FABulous, not our RTL.
+#
+# Pin: FABulous v2.0.0b5 == commit 4a2047b (chosen in docs/fabulous-version-decision.md).
+
+name: FABulous v2.0.0b5 smoke
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/fabulous-v2-smoke.yml"
+      - "docs/fabulous-setup-guide.md"
+      - "docs/fabulous-setup-guide-validation.md"
+  push:
+    branches:
+      - "feature/2-fabulous-v2-smoke-ci"
+    paths:
+      - ".github/workflows/fabulous-v2-smoke.yml"
+      - "docs/fabulous-setup-guide.md"
+      - "docs/fabulous-setup-guide-validation.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # FABulous pin — keep commit and tag in lockstep with docs/fabulous-version-decision.md.
+  # Full 40-char SHA: actions/checkout only treats `ref` as a commit when it is the full SHA
+  # (a short SHA is interpreted as a branch/tag name and may fail to resolve).
+  FAB_REF: "4a2047bbb1ff2a73d2bdb3e9f951d9746cfaa68a"   # v2.0.0b5
+  FAB_TAG: "v2.0.0b5"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Required green gate: T0 (toolchain present) + best-effort T1 (fabric gen).
+  # ---------------------------------------------------------------------------
+  smoke:
+    name: T0 toolchain (+ T1 fabric gen)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout FABulous at the pinned ref (workspace root)
+        uses: actions/checkout@v6
+        with:
+          repository: FPGA-Research/FABulous
+          ref: ${{ env.FAB_REF }}
+          # Need full tags so `git describe` can verify v2.0.0b5.
+          fetch-depth: 0
+
+      - name: Verify pinned ref (reproducibility guard)
+        shell: bash
+        run: |
+          set -euo pipefail
+          head="$(git rev-parse HEAD)"
+          echo "HEAD = $head"
+          if [ "${head#"${FAB_REF}"}" = "$head" ]; then
+            echo "FAIL: HEAD ($head) does not start with expected commit ${FAB_REF}"
+            exit 1
+          fi
+          desc="$(git describe --tags --exact-match 2>/dev/null || git describe --tags)"
+          echo "describe = $desc"
+          case "$desc" in
+            ${FAB_TAG}*) echo "OK: at ${FAB_TAG} (${FAB_REF})" ;;
+            *) echo "FAIL: expected tag ${FAB_TAG}, got '$desc'"; exit 1 ;;
+          esac
+
+      # Upstream composite: installs Nix (2.31.2), configures the FOSSi Foundation binary
+      # cache as a trusted substituter (so the EDA stack is fetched, not rebuilt from source),
+      # frees disk space, caches the Nix store, and warms the devshell. Resolvable because
+      # FABulous is the workspace root.
+      - name: Prepare Nix environment (upstream composite, pinned)
+        uses: ./.github/actions/prepare_nix_environment
+
+      # T0 — REQUIRED. Mirrors .github/workflows/nix-env.yml. The FOSSi cache is trusted
+      # globally via the composite's nix_conf, so plain `nix develop` needs no
+      # --accept-flake-config and will not hit an interactive flake-config prompt.
+      - name: 'T0: toolchain present (required gate)'
+        shell: bash
+        run: |
+          set -euo pipefail
+          nix develop --command bash -c "FABulous --version"
+          nix develop --command bash -c "openroad -version"
+          nix develop --command bash -c "yosys --version"
+          nix develop --command bash -c "fab-yosys -m ghdl -p help"
+
+      # T1 — REQUIRED. Fabric generation is RTL generation (no EDA P&R), expected to finish in
+      # minutes, and is the first real FABulous *functionality* check (T0 only proves the
+      # toolchain starts). It is a hard gate unless a real CI run shows it is too slow/flaky.
+      - name: 'T1: fabric generation (required)'
+        shell: bash
+        run: |
+          set -euo pipefail
+          nix develop --command bash -c "
+            set -e
+            FABulous create-project test_project
+            FABulous --project-dir test_project run 'run_FABulous_fabric'
+          "
+
+      # T1 artifact gate — REQUIRED. `run_FABulous_fabric` can exit 0 without producing the
+      # generated RTL; assert the specific *generated* (non-template) outputs exist and are
+      # non-empty. Filenames are pinned from v2.0.0b5 source — NOT guessed:
+      #   - Fabric top : Fabric/{fabric.name}.{ext}; fabric.name default "eFPGA"
+      #                  (fabulous/fabric_definition/fabric.py), ext "v" for the default Verilog
+      #                  writer (helper.create_project lang=HDLType.VERILOG).
+      #   - Tile top   : Tile/{t}/{t}.{ext}            (fabulous_cli.py do_gen_tile)
+      #   - Switch mat : Tile/{t}/{t}_switch_matrix.{ext} (fabulous_cli.py do_gen_switch_matrix)
+      # The project template ships only .csv/.list and primitive subcells in these dirs (never
+      # LUT4AB.v / LUT4AB_switch_matrix.v / eFPGA.v), so their presence proves generation ran.
+      # See docs/source/getting_started/quickstart.md §5 ("Tile RTL in Tile/, Fabric RTL in Fabric/").
+      - name: 'T1: verify generated fabric artifacts (required)'
+        shell: bash
+        run: |
+          set -euo pipefail
+          proj=test_project
+          fabric_top="$proj/Fabric/eFPGA.v"
+          tile_top="$proj/Tile/LUT4AB/LUT4AB.v"
+          sw_matrix="$proj/Tile/LUT4AB/LUT4AB_switch_matrix.v"
+
+          fail=0
+          for f in "$fabric_top" "$tile_top" "$sw_matrix"; do
+            if [ ! -s "$f" ]; then
+              echo "FAIL: expected generated artifact missing or empty: $f"
+              fail=1
+            else
+              echo "OK: $f ($(wc -l < "$f") lines)"
+            fi
+          done
+
+          # Content sanity: the fabric top must be real RTL (a module), not an empty stub.
+          if [ -s "$fabric_top" ] && ! grep -qiE '^[[:space:]]*module[[:space:]]' "$fabric_top"; then
+            echo "FAIL: $fabric_top contains no Verilog module declaration"
+            fail=1
+          fi
+
+          if [ "$fail" -ne 0 ]; then
+            echo "T1 artifact verification FAILED"
+            exit 1
+          fi
+          echo "T1 artifact verification passed"
+
+      - name: 'T1: summarize generated artifacts'
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## T1 fabric generation artifacts"
+            echo ""
+            if [ -d test_project ]; then
+              echo "Generated RTL under test_project/ (Tile + Fabric .v):"
+              echo '```'
+              find test_project/Tile test_project/Fabric -maxdepth 3 -type f \
+                -name '*.v' 2>/dev/null | sort | head -100
+              echo '```'
+            else
+              echo "_No test_project/ directory produced._"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # Optional lean path: uv / PyPI (guide §3b). Non-gating; validates that the
+  # FABulous Python tool installs and runs without the heavy Nix EDA closure.
+  # ---------------------------------------------------------------------------
+  uv-lean-path:
+    name: uv lean path (optional)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - name: Checkout FABulous at the pinned ref
+        uses: actions/checkout@v6
+        with:
+          repository: FPGA-Research/FABulous
+          ref: ${{ env.FAB_REF }}
+
+      - name: Install iverilog (extra system package per pytest_testing.yml)
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y iverilog
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8
+
+      - name: uv sync + FABulous --version
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv sync
+          uv run FABulous --version
+
+  # ---------------------------------------------------------------------------
+  # T2 — sky130 tile hardening. OPTIONAL, workflow_dispatch only, NOT a gate.
+  # Mirrors the gds-flow-ci.yml tile-hardening job (which legitimately runs sky130A
+  # tile hardening; only *fabric stitching* skips sky130A upstream). Heavy EDA P&R.
+  # ---------------------------------------------------------------------------
+  t2-sky130-tile-hardening:
+    name: 'T2: sky130A tile hardening (optional, dispatch only)'
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Checkout FABulous at the pinned ref (workspace root)
+        uses: actions/checkout@v6
+        with:
+          repository: FPGA-Research/FABulous
+          ref: ${{ env.FAB_REF }}
+          fetch-depth: 0
+
+      - name: Verify pinned ref (reproducibility guard)
+        shell: bash
+        run: |
+          set -euo pipefail
+          head="$(git rev-parse HEAD)"
+          if [ "${head#"${FAB_REF}"}" = "$head" ]; then
+            echo "FAIL: HEAD ($head) does not start with expected commit ${FAB_REF}"
+            exit 1
+          fi
+          echo "OK: at ${FAB_REF}"
+
+      - name: Prepare Nix environment (upstream composite, pinned)
+        uses: ./.github/actions/prepare_nix_environment
+
+      - name: Run sky130A tile hardening
+        shell: bash
+        run: |
+          set -euo pipefail
+          nix develop --command bash -c "
+            set -e
+            FABulous create-project test_project
+            sed -i \"s/FAB_PDK=.*/FAB_PDK='sky130A'/\" test_project/.FABulous/.env
+            echo 'PDK set to: sky130A'
+            cat test_project/.FABulous/.env
+            FABulous --project-dir test_project run 'run_FABulous_fabric'
+            FABulous --project-dir test_project run 'gen_all_tile_macros' > tile_hardening_output.txt 2>&1
+          "
+
+      # Manufacturability parser reused verbatim from upstream gds-flow-ci.yml.
+      - name: Verify tile manufacturability
+        if: always()
+        shell: bash
+        run: |
+          if [ ! -f tile_hardening_output.txt ]; then
+            echo "FAIL: tile_hardening_output.txt not found"
+            exit 1
+          fi
+
+          sed -n '/Report Manufacturability/,$p' tile_hardening_output.txt > tile_report.txt
+          echo "=== tile hardening manufacturability report ==="
+          tail -300 tile_report.txt
+
+          fail=0
+          for check in "Antenna" "LVS" "DRC"; do
+            results=$(awk -v c="$check" '
+              prev == "* " c { print }
+              { prev = $0 }
+            ' tile_report.txt)
+
+            total=$(printf "%s\n" "$results" | grep -c .)
+            passed=$(printf "%s\n" "$results" | grep -c "^Passed")
+
+            if [ "$total" -eq 0 ]; then
+              echo "FAIL: no ${check} results found (did any tile reach manufacturability?)"
+              fail=1
+            elif [ "$total" -ne "$passed" ]; then
+              echo "FAIL: ${check} ${passed}/${total} tiles passed"
+              fail=1
+            else
+              echo "OK: ${check} ${passed}/${total} tiles passed"
+            fi
+          done
+
+          if [ "$fail" -ne 0 ]; then
+            exit 1
+          fi
+          echo "All tiles passed manufacturability checks"
+
+      - name: Package tile project
+        if: always()
+        shell: bash
+        run: |
+          tar --zstd -cf tile-project.tar.zst \
+            --ignore-failed-read \
+            test_project \
+            tile_hardening_output.txt \
+            tile_report.txt || true
+
+      - name: Upload tile project
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tile-project-sky130A
+          path: tile-project.tar.zst
+          if-no-files-found: warn
+          retention-days: 2
