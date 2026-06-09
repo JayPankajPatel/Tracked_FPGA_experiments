@@ -179,29 +179,40 @@ source-built packages included `ghdl-bin-6.0.0` (cache had `5.1.1`), `klayout-0.
 `fabulous-fasm`). Those 252 builds are why run #1 (~54 min) **exceeded upstream `nix-env.yml`'s own
 partial-cold baseline (~25 min)** and warm baseline (2–4 min).
 
-**Self-healing expectation:** the source-built paths are saved into this repo's `cache-nix-action` store
-cache, so run #2 (same `flake.lock` hash) should restore them and collapse toward the single-digit-minute
-range. *(To be confirmed by run #2 — triggered by the follow-up commit that also fixes uv.)* **Caveat
-(A-class):** the upstream composite caps the store cache at `gc-max-store-size-linux: 10G`; if the full
-EDA closure exceeds that, run #2 may not be fully warm. **Suggested guide edit:** state plainly that the
-first clean Nix bring-up is ~tens of minutes (cold, with some source builds), not "minutes," and is
-amortized by the store cache on subsequent runs.
+**Self-healing — DID NOT happen on run #2; root cause found (run #2).** The store cache was **never
+saved**: run #1's `Post Prepare Nix environment` took ~1 s and emitted only
+`##[warning] Resource not accessible by integration - …/actions/cache`, with no upload. Confirmed via the
+REST API: repo Actions caches **`total_count: 0`**. Consequently **run #2 (`27188827744`) was cold again**
+and re-paid the full ~54-min build. **Cause:** `cache-nix-action@v7` (inside `prepare_nix_environment`)
+saves/purges the store via the Actions cache **REST API**, which requires **`actions: write`** — but the
+workflow granted only `permissions: contents: read` (mirrored from upstream `nix-env.yml`). **Fix applied:**
+add `actions: write` to the workflow `permissions`. **Caveat (still open):** the composite caps the saved
+store at `gc-max-store-size-linux: 10G`; if the EDA closure exceeds that, even a *saved* cache may not fully
+warm subsequent runs. **Suggested guide edit:** state that (a) the first clean Nix bring-up is ~tens of
+minutes (cold, with some source builds), not "minutes"; and (b) a consumer mirroring the composite **must
+grant `actions: write`** or the store cache never persists and every run is cold.
 
-### ❌ → fixed: uv-lean-path (non-gating) failed on run #1
-`astral-sh/setup-uv@v8` failed to resolve in ~3 s: *"Unable to resolve action … unable to find version
-`v8`"*. The action publishes **no floating `v8` major alias** (highest major alias is `v7`; latest release
-is `v8.2.0`). **Fix:** pin the exact release `astral-sh/setup-uv@v8.2.0`. This is a reproducibility lesson
-in itself — do not assume a `vN` major alias exists for a marketplace action; verify or pin the exact tag.
-*(uv path functional result — `uv sync` + `FABulous --version` — to be confirmed on run #2.)*
+### uv-lean-path (non-gating): two sequential failures, both fixed
+- **Run #1:** `astral-sh/setup-uv@v8` failed to resolve in ~3 s (*"unable to find version `v8`"*) — the
+  action publishes **no floating `v8` major alias** (highest is `v7`; latest release `v8.2.0`). **Fix:** pin
+  the exact release `@v8.2.0`. *(Lesson: don't assume a `vN` major alias exists for a marketplace action.)*
+- **Run #2:** with `setup-uv` resolved, **`uv sync` failed: `ModuleNotFoundError: No module named 'tkinter'`**
+  — the FABulous Python env needs the `python3-tk` system package. **Fix:** add `python3-tk` to the apt
+  install (alongside `iverilog`). **Suggested guide edit:** §3b's uv path needs `iverilog` **and**
+  `python3-tk` as extra system packages.
 
-### Still pending
-- [ ] **Run #2 (warm cache):** confirm the store-cache restore drops `Prepare Nix environment` to
-      single-digit minutes (or document the 10 G cap preventing it); confirm `uv-lean-path` is green.
+### Still pending (run #3 onward)
+- [ ] **Cache save (run #3):** with `actions: write`, confirm the store cache now persists
+      (repo `actions/caches` `total_count` → ≥1 after the post step).
+- [ ] **Warm restore (run #4):** confirm a subsequent run restores the store and drops
+      `Prepare Nix environment` to single-digit minutes (or document the 10 G cap preventing it).
+- [ ] **uv-lean-path green (run #3):** confirm `uv sync` + `FABulous --version` succeed with `python3-tk`.
 - [ ] **T2 feasibility:** trigger sky130A tile hardening via `workflow_dispatch`; record wall-clock and
       Antenna/LVS/DRC counts, or document infeasibility within `timeout-minutes: 360`.
-- [ ] **Recommended guide edits:** consolidated list — A1, A2, A4, A8, plus the new run-#1 findings
-      (FABulous reports `0.0.0`; first cold Nix bring-up is tens of minutes with source builds) — for a
-      follow-up `docs` PR.
+- [ ] **Recommended guide edits:** consolidated list — A1, A2, A4, A8, plus run-#1/#2 findings (FABulous
+      reports `0.0.0`; first cold Nix bring-up is tens of minutes with source builds; mirroring the Nix
+      composite needs `actions: write` for cache persistence; uv path needs `python3-tk`) — for a follow-up
+      `docs` PR.
 
 ### Triage note (carried): if a future run fails, do not reflexively weaken T1
 Diagnose first as one of: real guide/setup bug · incorrect artifact-path assumption · FABulous v2.0.0b5

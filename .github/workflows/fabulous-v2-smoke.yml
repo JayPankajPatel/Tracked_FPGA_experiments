@@ -32,6 +32,11 @@ on:
 
 permissions:
   contents: read
+  # cache-nix-action (inside prepare_nix_environment) saves/purges the Nix store cache via the
+  # Actions cache REST API, which needs `actions: write`. Without it the save fails silently
+  # ("Resource not accessible by integration") and EVERY run pays the full cold Nix build
+  # (~54 min) instead of restoring a warm store. See findings §B.
+  actions: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -186,11 +191,13 @@ jobs:
           repository: FPGA-Research/FABulous
           ref: ${{ env.FAB_REF }}
 
-      - name: Install iverilog (extra system package per pytest_testing.yml)
+      - name: Install extra system packages (iverilog per pytest_testing.yml; python3-tk for uv sync)
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y iverilog
+          # iverilog: simulation per pytest_testing.yml.
+          # python3-tk: `uv sync` fails with "No module named 'tkinter'" without it (run #1 finding).
+          sudo apt-get install -y iverilog python3-tk
 
       - name: Set up uv
         # Pin to an exact release: astral-sh/setup-uv publishes no floating `v8` major alias
