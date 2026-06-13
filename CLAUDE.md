@@ -204,7 +204,38 @@ Be direct and evidence-driven. Before committing to an architecture, prefer smal
 
 For major architecture decisions, research-heavy questions, or difficult debugging, use an independent review pass or second model as a rubber duck. Capture important conclusions in `HANDOFF.md`, GitHub Issues, GitHub Discussions, or the relevant docs.
 
-AI tools and coding agents do not make project decisions by default. Prompt them with clear questions, candidate options, expected tradeoffs, and required outputs. When useful, ask them to argue against their own recommendation and identify missing experiments.
+AI tools and coding agents do not make project decisions by default. Prompt them with clear questions, candidate options, expected tradeoffs, and required outputs. For nontrivial decisions, require both an optimistic pass and a pessimistic pass before accepting the recommendation.
+
+### Optimistic / Pessimistic Rubber-Ducking
+
+For research-heavy work, toolchain choices, architecture decisions, external dependencies, or any path based on prior experiments, use an explicit two-pass review before writing implementation docs or code.
+
+The goal is to prevent convenient evidence from becoming trusted infrastructure too early.
+
+Run both passes:
+
+1. **Optimistic pass**
+   - Argue why the proposed path should work.
+   - Identify evidence that supports it.
+   - Identify what can be reused from official docs, upstream workflows, local experiments, or prior project notes.
+   - State the fastest useful validation path.
+
+2. **Pessimistic pass**
+   - Argue why the proposed path may be wrong.
+   - Identify untrusted dependencies, stale docs, accidental local state, hidden assumptions, maintenance risk, missing outputs, or reproducibility gaps.
+   - Distinguish official upstream sources from prior art, experiments, personal repos, and local machine history.
+   - State what evidence would falsify the plan.
+
+After both passes, reconcile them into:
+
+- default recommendation
+- fallback option
+- evidence still missing
+- minimum experiment or health check
+- explicit non-goals
+- what must not be copied, trusted, or adopted yet
+
+Important rule: **working prior art is evidence, not authority.** If an old local experiment or third-party repo worked once, use it to learn what to check, not as a default dependency. Official docs, pinned upstream sources, and reproducible validation should define the project path unless there is a deliberate documented decision to adopt something else.
 
 Useful architecture review prompt structure:
 
