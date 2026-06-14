@@ -54,6 +54,37 @@ that internal net. Source `pnl.v` instead wires tiles from bit-shuffled slices o
 (`.FrameData({FrameData[351], FrameData[383], …})`). Net correspondence therefore breaks at the boundary
 for these buses only.
 
+## Logically connected, physically split (the decisive evidence)
+
+OpenROAD's `32-odb-reportdisconnectedpins` reports **0 disconnected pins** — the logical netlist is
+complete. The DEF feeding Magic extraction (`36-odb-cellfrequencytables/eFPGA.def`,
+`UNITS … 1000`, `DIEAREA 0 0 2482160 3930400`) shows each global net **is** defined with its pin and
+its tile terminal:
+
+```
+NETS: - FrameData[0] ( PIN FrameData[0] ) ( Tile_X1Y0_N_term_single FrameData[0] ) ;
+PINS: - FrameData[0] … + LAYER met3 (…) + PLACED ( 300 3701580 ) N ;   # x≈0.3µm  (WEST die edge)
+COMP: - Tile_X1Y0_N_term_single … FIXED ( 247480 3683560 ) N ;          # x≈247µm  (interior col 1)
+```
+
+So the pin and the tile terminal are the same *logical* net, but the pin metal sits on the die edge
+~247µm from the interior tile terminal. **Routing is disabled**, so no wire bridges the gap; Magic's
+geometric extraction therefore yields two separate nodes. This reconciles the `+9` net count vs `1581`
+disconnected pins: the netlist intent is correct (few net-count delta), the break is purely
+physical→extraction (1581 unbridged top pins).
+
+### Contrast: a matched per-tile IO vs a failed global net
+
+| net | connected tile | tile placement | pin placement | outcome |
+|---|---|---|---|---|
+| `Tile_X0Y10_A_I_top` ✅ | `Tile_X0Y10_W_IO` | x≈1.38µm (**west perimeter**) | west edge x≈0.3µm | pin overlaps tile terminal → merged |
+| `FrameData[0]` ❌ | `Tile_X1Y0_N_term_single` | x≈247µm (**interior col 1**) | west edge x≈0.3µm | ~247µm gap, no wire → split |
+
+`fabric_io_place.py` chooses the die-edge *side* from the master tile's mTerm and aligns only the
+cross-axis to the iterm centre — it ignores whether the connected **instance** is on the die perimeter.
+Perimeter IO terminals reach the boundary, so the edge pin overlaps; interior/global-net terminals do
+not, so the edge pin floats.
+
 ## Why global nets break but per-tile IO doesn't
 
 The fabric flow (`fabulous/fabric_generator/gds_generator/flows/fabric_macro_flow.py`) is **macro
@@ -81,17 +112,21 @@ sky130A fabric LVS is an **unvalidated upstream path**.
 
 ## Fix direction (to validate in Phase 2 two-pass review before applying)
 
-Make the top-level IO pin for every global net **electrically unify** with its internal abutment net,
-inside the official flow. Candidate, smallest-first:
+The break is **physical** (pin metal genuinely does not touch the interior tile terminal), so an
+extraction/label-only change cannot fix it — the geometry must connect. Make the top-level IO pin
+physically reach its tile terminal, inside the official flow. Candidate, smallest-first:
 
-1. **IO-placement fix** — in `fabric_io_place.py`, for a multi-iterm net, choose the iterm whose pin
-   actually sits on the die boundary (or place the BPin over a boundary point of the net), so the BPin
-   overlaps real net metal. (Root-cause fix; PDK-agnostic.)
-2. **Extraction unification** — Magic label/port preference so the top-level port label and the internal
-   spanning net merge (note fabric config already sets `MAGIC_EXT_UNIQUE: notopports`). Only viable if
-   the BPin geometry already touches the net.
-3. **Confirm PDK-specificity** — run `gen_fabric_macro` on `ihp-sg13g2`/`gf180mcuD` to see whether the
-   same LVS passes there; if so, diff what makes sky130A break (IO layers met2/met3, PDN met4/met5).
+1. **IO-placement fix (root cause, PDK-agnostic)** — in `fabric_io_place.py`, place / extend the BPin so
+   it overlaps the connected iterm's metal instead of slamming it to the far die edge. Either (a) place
+   the pin shape at the iterm location, or (b) extend the pin from the die edge inward to the iterm
+   (a `met2`/`met3` stub), or (c) draw a guide-route/special-wire pin→iterm. Must stay DRC-clean and not
+   break neighbouring abutment.
+2. **Confirm PDK-specificity first** — upstream gates fabric LVS on `ihp-sg13g2`/`gf180mcuD` (excludes
+   sky130A). If those genuinely pass, diff what differs (IO layers met2/met3, the no-router abutment
+   geometry) to converge on the intended connection mechanism rather than inventing one.
+3. **If the fix belongs upstream** (Task D) — produce a minimal reproducer + patch note for
+   `fabric_io_place.py`; the gitignored checkout means the patch must be tracked (patch file applied in
+   CI) to be a real deliverable.
 
 **Out:** copying OpenLane-classic PDN/core-ring values (ruled out — not power); re-hardening tiles
 (13/13 clean, blackboxes matched); changing the v2.0.0b5 ref; adopting mole99.
