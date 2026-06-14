@@ -323,3 +323,88 @@ jobs:
           path: tile-project.tar.zst
           if-no-files-found: warn
           retention-days: 2
+
+  # ---------------------------------------------------------------------------
+  # Issue #7 bootstrap health-check: prove the OFFICIAL FABulous v2 GDS flow can
+  # BEGIN a sky130A tile-hardening flow THROUGH SYNTHESIS (PDK + liberty resolve,
+  # dfflibmap maps cells), then stop. NOT a full harden — finished GDS +
+  # manufacturability are the follow-up issue's job (see t2 above for the full run).
+  # Catches the PDK-format / LibreLane LIB={} failure class cheaply.
+  # workflow_dispatch only. Validated locally 2026-06-13 (docs/gds-toolchain-bootstrap.md).
+  # ---------------------------------------------------------------------------
+  gds-bootstrap-synth-check:
+    name: 'GDS bootstrap: sky130A through-synthesis (issue #7, dispatch only)'
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout FABulous at the pinned ref (workspace root)
+        uses: actions/checkout@v6
+        with:
+          repository: FPGA-Research/FABulous
+          ref: ${{ env.FAB_REF }}
+          fetch-depth: 0
+
+      - name: Verify pinned ref (reproducibility guard)
+        shell: bash
+        run: |
+          set -euo pipefail
+          head="$(git rev-parse HEAD)"
+          if [ "${head#"${FAB_REF}"}" = "$head" ]; then
+            echo "FAIL: HEAD ($head) does not start with expected commit ${FAB_REF}"
+            exit 1
+          fi
+          echo "OK: at ${FAB_REF}"
+
+      - name: Prepare Nix environment (upstream composite, pinned)
+        uses: ./.github/actions/prepare_nix_environment
+
+      - name: Begin sky130A tile flow through synthesis (PDK pinned)
+        shell: bash
+        env:
+          # Pin the sky130A PDK commit explicitly (FABulous `pdk_hash` setting) so the
+          # resolved version is deterministic, not ciel's drifting default.
+          FAB_PDK_HASH: 8afc8346a57fe1ab7934ba5a6056ea8b43078e71
+        run: |
+          set -uo pipefail
+          export PDK_ROOT="$PWD/.pdk"            # isolated; never reuse a local ~/.ciel
+          nix develop --command bash -c "
+            set -e
+            FABulous create-project test_project
+            sed -i \"s/FAB_PDK=.*/FAB_PDK='sky130A'/\" test_project/.FABulous/.env
+            {
+              librelane --version
+              FABulous --project-dir test_project run 'run_FABulous_fabric'
+              # Bound: let the tile flow BEGIN through synthesis, then stop (bootstrap, not full GDS).
+              timeout --preserve-status 1800 FABulous --project-dir test_project run 'gen_all_tile_macros'
+            } > synth_output.txt 2>&1 || true
+          "
+          echo '--- tail of flow output ---'; tail -50 synth_output.txt || true
+
+      - name: Assert synthesis resolved liberty (LIB != {}) and entered P&R
+        shell: bash
+        run: |
+          set -uo pipefail
+          f=synth_output.txt
+          [ -s "$f" ] || { echo "FAIL: no flow output produced"; exit 1; }
+          echo "librelane: $(grep -m1 -iE 'LibreLane v' "$f" || echo '?')"
+          if grep -qiE "Missing .-liberty|LIB *= *\{\}" "$f"; then
+            echo "FAIL: LIB={} / dfflibmap missing liberty -> PDK/LibreLane format mismatch (falsifier 2)"
+            exit 1
+          fi
+          if grep -qE "Running 'OpenROAD|Floorplanned on a|Floorplan Initialization" "$f"; then
+            echo "OK: synthesis completed (DFFLIBMAP clean) and the flow entered OpenROAD/floorplan"
+          else
+            echo "FAIL: did not reach a post-synthesis OpenROAD step within the time bound"
+            grep -niE "Yosys.Synthesis|DFFLIBMAP|error|FlowError|Traceback" "$f" | tail -25 || true
+            exit 1
+          fi
+
+      - name: Upload synthesis log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gds-bootstrap-synth-log
+          path: synth_output.txt
+          if-no-files-found: warn
+          retention-days: 2

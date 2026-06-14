@@ -1,5 +1,43 @@
 # HANDOFF
 
+## 2026-06-13 — Issue #7: GDS toolchain bootstrap (OFFICIAL FABulous v2 flow)
+
+**Branch:** `feature/7-gds-toolchain-bootstrap` (off `main`; do not push/merge `main`)
+
+**Current goal:** Issue #7 — reproducible bootstrap of the GDS toolchain via the **official FABulous v2.0.0b5 built-in GDS/LibreLane flow** (issue #7 was rewritten to mandate this; `mole99` demoted to prior art). Bootstrap = prove the flow installs + runs **through synthesis**; finished GDS is the follow-up.
+
+**Process:** Plan re-evaluated with the new CLAUDE.md **Optimistic/Pessimistic two-pass run as two independent agents** (agA optimistic, agB pessimistic). CLAUDE.md clause clarified to require two separate agents.
+
+**Result — bootstrap validated locally (through synthesis): PASS.**
+- Fresh FABulous `v2.0.0b5` (`4a2047b`) Nix devshell; `FAB_PDK='sky130A'`; `gen_all_tile_macros`.
+- **LibreLane `v3.0.3`** (flake.lock rev `1e4f4d5b`). sky130A PDK **auto-resolved to ciel `8afc8346`** (OpenLane-format → LibreLane-readable), fetched fresh into an isolated `PDK_ROOT`; **`~/.ciel` untouched**.
+- `Yosys.Synthesis` → `DFFLIBMAP` clean (no `Missing -liberty`) → `OpenROAD.Floorplan` (die 250×491 µm) → CTS. **No `LIB={}`.** ~2.5 min warm through synthesis.
+- Pin the PDK explicitly with **`FAB_PDK_HASH=8afc8346…`** (FABulous `pdk_hash`) to kill ciel-default drift.
+
+**Falsifiers (from the two-agent review):** #2 (LIB={}) FALSE; #4 (dev-string version) FALSE (reports v3.0.3); #5 (only local 0fe599b2) FALSE; #1 (commit drift) mitigated by pinning `FAB_PDK_HASH`; **#3 (CI Nix-store + PDK vs 10 GB cap) OPEN — confirm on a cold runner.**
+
+### Changes made
+- `docs/gds-toolchain-bootstrap.md` (new) — official-path bootstrap guide: pinned inventory, clean-env setup, PDK pin, through-synthesis health check + local result, cold/warm + disk, falsifier table, **labeled "Prior art (mole99) — lessons, not adopted"** section.
+- `docs/followup-issue-gds-generation.md` (new) — drafted follow-up ramp (A: one tile → GDS macro + manufacturability; B: example FPGA fabric). Not posted.
+- `.github/workflows/fabulous-v2-smoke.yml` — new `gds-bootstrap-synth-check` job (`workflow_dispatch`): checkout+guard+Nix-composite (reused from #2), `FAB_PDK_HASH` pinned, runs `gen_all_tile_macros` time-bounded, **asserts synthesis resolved liberty + entered OpenROAD** (fails on `LIB={}`). `t2` full-harden job left for the follow-up.
+- `.gitignore` (new) — ignore the official/testchip clones, PDK stores, logs, local smoke scripts.
+- `CLAUDE.md` — clarified §Optimistic/Pessimistic Rubber-Ducking to require **two separate independent agents** (separate concern; can split to its own `update/` branch).
+
+### Validation run
+- Local: official smoke through synthesis = PASS (above). Workflow YAML: `yaml.safe_load` OK (jobs: smoke, uv-lean-path, t2-sky130-tile-hardening, gds-bootstrap-synth-check).
+- Not run: cold-runner CI of `gds-bootstrap-synth-check` (needs user push + dispatch) — confirms falsifier #3 (disk).
+
+### mole99 prior art (this session, NOT adopted)
+Earlier hardened a clean `LUT4x8_ha` tile via the mole99 plugin — reclassified as prior art per the rewritten #7. Key transferable lesson (now in the guide): LibreLane reads liberty via `pdk_compat` from **OpenLane-format** PDKs; a `CELL_LIBS`-format PDK gives `LIB={}`. The official auto-resolved `8afc8346` is OpenLane-format, hence it works.
+
+### Next recommended action
+1. **User:** review the docs + workflow on `feature/7`; push the branch and `workflow_dispatch` `gds-bootstrap-synth-check` to confirm the through-synthesis check + disk (falsifier #3) on a clean runner (agent will not push/dispatch without approval).
+2. Fold any CI findings (timing, disk) back into `docs/gds-toolchain-bootstrap.md` §6/§7.
+3. On close, open the follow-up issue(s) from `docs/followup-issue-gds-generation.md`.
+4. (Optional) split the CLAUDE.md clarification to its own `update/` branch.
+
+---
+
 ## 2026-06-08 — Issue #2: FABulous v2.0.0b5 smoke-validation CI workflow
 
 **Branch:** `feature/2-fabulous-v2-smoke-ci` (off `main`; do not push/merge `main`)

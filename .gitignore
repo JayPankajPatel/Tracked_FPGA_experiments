@@ -1,0 +1,18 @@
+# Local experiment workspaces — tool checkouts, runs, and PDK/build artifacts.
+# These are clones/outputs and must never be committed (see CLAUDE.md hygiene rules).
+/FABulous_work/sky130-fabulous-testchip/
+/FABulous_work/fabulous-v2/
+/FABulous_work/**/runs/
+/FABulous_work/**/macro/
+
+# Nix build result symlinks
+result
+result-*
+
+# Bootstrap experiment logs + local scratch scripts (canonical commands live in docs/)
+/FABulous_work/*.log
+/FABulous_work/_logs/
+/FABulous_work/*.sh
+
+# PDK store (ciel/volare)
+.ciel/
