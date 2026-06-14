@@ -101,9 +101,14 @@ nix develop --command bash -c '
 
 ## 9. Deferred to the follow-up issue(s)
 
-- Finish **one tile** to a GDS macro + manufacturability (antenna/LVS/DRC) via the official flow.
-- Then a **standard example FPGA** fabric (fabric stitching — note upstream skips sky130A fabric stitch on stock runners).
-- Macro `.lib`/timing-model generation; timing closure; final signoff.
+- ✅ **Done (issue #10, `docs/fabric-gds-baseline.md`):** all 13 standard-demo tiles hardened to GDS,
+  manufacturability **13/13** antenna/LVS/DRC (~15 min, 2.1 GB). Fabric stitch (`gen_fabric_macro`)
+  on sky130A **was not resource-killed** on a 29 GB host — it streamed a `eFPGA.gds` (~52 MB, die
+  ≈9.76 mm²) in 4.5 min / ~19 GB peak, but **failed signoff with 1591 LVS errors** (`FlowError`):
+  a reproducible *signoff* blocker, not a resource one.
+- **Still open:** root-cause the fabric-stitch LVS (≈9 unmatched top-level nets; prior-art hypotheses
+  in `docs/fabric-gds-baseline.md` §C.2 from `~/wiki`); macro `.lib`/timing-model generation (none
+  emitted today); timing closure; final signoff.
 
 ## 10. References
 
