@@ -1,8 +1,8 @@
 # Issue #12 — Fabric-stitch LVS blocker: root cause
 
-**Status:** Root cause localized from on-disk evidence (PR #11 run
-`RUN_2026-06-13_22-57-46`); mechanism corrected by the Phase-2 two-pass review (see end). **Not PDN.**
-Fix in progress.
+**Status:** ✅ **RESOLVED** — fabric LVS/DRC/Antenna all pass on sky130A (`RUN_2026-06-14_08-12-05`).
+Root cause localized from on-disk evidence (PR #11 run `RUN_2026-06-13_22-57-46`); mechanism corrected
+by the Phase-2 two-pass review (see end). **Not PDN.** Fix: `docs/issue-12/patches/fabric_io_place-overlap-iterm.patch`.
 **Env (inherited #7/#10, unchanged):** FABulous `v2.0.0b5` `4a2047b`, LibreLane `v3.0.3`,
 sky130A `FAB_PDK_HASH=8afc8346…`.
 
@@ -163,14 +163,45 @@ The earlier "global-only / per-tile-IO-matches" framing was **wrong**: all ~1581
 uniformly (per-tile `A_I_top` included) because of the halo inset + edge-slam + no-wire, not a
 high-fanout/`iterms[0]`-ordering effect. The fix direction is unchanged and is simpler for being uniform.
 
-## Before/after fingerprint (to fill in Phase 3)
+## The fix (applied)
 
-- **Before:** 1591 LVS errors · devices 151=151 · nets 34837 vs 34828 (+9) · 1581 disconnected pins ·
-  `Top level cell failed pin matching`.
-- **After:** _TBD_.
+`fabric_io_place.py` now places a pin shape **directly over every iterm** of each top-level port, on
+that terminal's own layer, instead of slamming one shape to the die edge:
+- single-driver ports (e.g. `FrameData[i]`, per-tile IO) → one shape on the terminal;
+- fan-out globals (e.g. `UserCLK` → 10 column terminators) → one shape per terminal, so all unify under
+  the port at extraction.
+
+No router is needed; tiles, PDN, placement, and the grid floorplan are untouched. Tracked patch:
+`docs/issue-12/patches/fabric_io_place-overlap-iterm.patch` (+37/−83; applies cleanly on
+`v2.0.0b5` blob `41d9a13`). Apply with `docs/issue-12/apply-fix.sh <checkout>`.
+
+### Iteration log (Phase 3)
+1. Place each pin over `iterms[0]` → top-level pin matching went from *"Top level cell failed pin
+   matching"* (1581 unmatched) to *"Cell pin lists are equivalent"*; residual mismatch = exactly **9
+   `UserCLK` nets** (the only multi-fanout global).
+2. Place a pin shape over **all** iterms → `UserCLK` unified across its 10 terminals → **green**.
+
+## Before/after fingerprint
+
+| | Before (`RUN_2026-06-13_22-57-46`) | After (`RUN_2026-06-14_08-12-05`) |
+|---|---|---|
+| netgen result | `Top level cell failed pin matching` | **`Circuits match uniquely`** |
+| devices | 151 = 151 | 151 = 151 |
+| nets | 34837 vs 34828 (**+9**) | **34828 = 34828** |
+| disconnected top pins | 1581 | 0 |
+| LVS / DRC / Antenna | LVS fail → `FlowError` | **Passed / Passed / Passed** |
+| `eFPGA.gds` | 52 MB (signoff failed) | 52 MB (clean) |
+| runtime / peak RSS | 4:29 / 18.8 GB | 4:33 / 18.8 GB (geometry-only) |
+
+Out-of-scope residuals (unchanged from #10, documented): no macro `.lib`/SPEF → tiles black-boxed for
+timing; generic fallback SDC (timing not closed); Magic DRC skipped (KLayout DRC is the verdict).
 
 ## Artifacts
-- Preserved text evidence: `docs/issue-12/evidence/` (rpt, json, lvs_script, netlist headers, log tail).
-- Full failing run (gitignored): `FABulous_work/fabulous-v2/fabric_baseline_proj/Fabric/macro/runs/RUN_2026-06-13_22-57-46/`.
+- Before evidence: `docs/issue-12/evidence/` (rpt, json, lvs_script, netlist headers, log tail).
+- After evidence: `docs/issue-12/evidence-after/` (green rpt, manufacturability, log tail).
+- Fix: `docs/issue-12/patches/fabric_io_place-overlap-iterm.patch`; apply: `docs/issue-12/apply-fix.sh`.
+- Full runs (gitignored): `…/RUN_2026-06-13_22-57-46/` (before), `…/RUN_2026-06-14_08-12-05/` (after).
 - Flow source: `fabulous/fabric_generator/gds_generator/flows/fabric_macro_flow.py`,
   `steps/fabric_IO_placement.py`, `script/fabric_io_place.py`.
+- CI: `.github/workflows/fabulous-v2-smoke.yml` `gds-fabric-stitch` applies the patch + asserts
+  manufacturability (still non-failing on stock-runner OOM, ~19 GB peak).

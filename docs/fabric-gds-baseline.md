@@ -7,6 +7,8 @@ macro) and record a reproducible baseline.
 synthesis; this issue completes the macros and attempts fabric composition.
 **Status:** **tile hardening = PASS** (13/13 tiles, manufacturability-clean). **Fabric stitch =
 GDSII produced (~52 MB) but signoff fails (1591 LVS errors → `FlowError`); not resource-killed.** See §C.
+**Update (#12, 2026-06-14): the §C LVS blocker is RESOLVED — fabric LVS/DRC/Antenna now pass.** Root
+cause + fix in `docs/issue-12/root-cause.md` (IO-pin↔terminal overlap in `fabric_io_place.py`; not PDN).
 
 > **Scope note (title vs. body).** Issue #10's title says "no-DSP", but the body was edited to drop
 > the DSP-exclusion tasks. FABulous v2.0.0b5 ships exactly **one** example fabric — the
@@ -115,6 +117,13 @@ root-causing the 1591 LVS errors is follow-up work, not in this issue's scope (n
 
 > **Acceptance:** both branches are satisfied simultaneously — a stitched GDSII artifact **exists**
 > *and* a reproducible blocker (LVS/`FlowError`) is documented with logs.
+
+> **RESOLVED in #12.** The 1591 LVS errors were **not** PDN power islands (the §C.2 prior-art
+> hypotheses were the *wrong* lead — zero unmatched nets are power). They were top-level IO pins
+> floating off their tile terminals: the no-router fabric flow placed every top BPin on the die edge
+> while tiles are 1 µm halo-inset. Fix = place a pin shape over every tile terminal in
+> `fabric_io_place.py`. Fabric LVS/DRC/Antenna now pass (`RUN_2026-06-14_08-12-05`). Full write-up:
+> `docs/issue-12/root-cause.md`.
 
 ### C.1 LVS fingerprint (netgen report)
 

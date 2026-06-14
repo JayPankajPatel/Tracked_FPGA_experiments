@@ -1,0 +1,152 @@
+diff --git a/fabulous/fabric_generator/gds_generator/script/fabric_io_place.py b/fabulous/fabric_generator/gds_generator/script/fabric_io_place.py
+index 41d9a13..e42ec02 100644
+--- a/fabulous/fabric_generator/gds_generator/script/fabric_io_place.py
++++ b/fabulous/fabric_generator/gds_generator/script/fabric_io_place.py
+@@ -1,8 +1,11 @@
+-"""Place I/O pins on the die edge based on mTerm positions."""
++"""Place top-level I/O pins over their connected tile terminals.
++
++The fabric stitching flow has no router, so a top-level port connects to its
++driver(s) only by geometric overlap. This step places a pin shape directly over
++every terminal of each port so the layout matches the netlist at extraction.
++"""
+ 
+ import logging
+-import math
+-from decimal import Decimal
+ 
+ import click
+ import odb  # type: ignore[import]
+@@ -88,46 +91,11 @@ def io_place(
+     if verbose:
+         logging.getLogger().setLevel(logging.DEBUG)
+ 
+-    micron_in_units = reader.dbunits
+-
+-    h_extension = int(micron_in_units * hor_extension)
+-    v_extension = int(micron_in_units * ver_extension)
+-
+-    if h_extension < 0:
+-        h_extension = 0
+-
+-    if v_extension < 0:
+-        v_extension = 0
+-
++    # Fallback layer for the rare case an iterm exposes no routing geometry; the
++    # per-iterm layer (below) is used otherwise. The pin size/length/extension and
++    # vertical-layer options are retained for CLI/step compatibility but are no
++    # longer needed: pins are placed to cover the actual terminal, not sized bars.
+     h_layer = reader.tech.findLayer(hor_layer)
+-    v_layer = reader.tech.findLayer(ver_layer)
+-
+-    h_width = int(Decimal(hor_width_mult) * h_layer.getWidth())
+-    v_width = int(Decimal(ver_width_mult) * v_layer.getWidth())
+-
+-    if hor_length is not None:
+-        h_length = int(micron_in_units * hor_length)
+-    else:
+-        h_length = max(
+-            int(
+-                math.ceil(
+-                    h_layer.getArea() * micron_in_units * micron_in_units / h_width
+-                )
+-            ),
+-            h_width,
+-        )
+-
+-    if ver_length is not None:
+-        v_length = int(micron_in_units * ver_length)
+-    else:
+-        v_length = max(
+-            int(
+-                math.ceil(
+-                    v_layer.getArea() * micron_in_units * micron_in_units / v_width
+-                )
+-            ),
+-            v_width,
+-        )
+ 
+     # Die area
+     die = reader.block.getDieArea()
+@@ -149,29 +117,7 @@ def io_place(
+             )
+             continue
+ 
+-        iterm = iterms[0]
+-        ibox: odbRectLike = iterm.getBBox()
+-        cx = ibox.xCenter()
+-        cy = ibox.yCenter()
+-
+-        # Get mTerm bbox to determine which side of the master tile it's on
+-        mterm = iterm.getMTerm()
+-        master = mterm.getMaster()
+-        # Use mTerm bbox position relative to master to determine side
+-        side = None
+-        # Get the first mPin's geometry bbox
+-        mterm_bbox: odbRectLike = mterm.getBBox()
+-
+-        if mterm_bbox.xMin() == 0:
+-            side = "WEST"
+-        if mterm_bbox.xMax() == master.getWidth():
+-            side = "EAST"
+-        if mterm_bbox.yMin() == 0:
+-            side = "SOUTH"
+-        if mterm_bbox.yMax() == master.getHeight():
+-            side = "NORTH"
+-
+-        # Prepare or reuse BPin
++        # Prepare or reuse the BPin.
+         pins = bterm.getBPins()
+         if len(pins) > 0:
+             warn(f"{bterm.getName()} already has shapes. Modifying existing shape.")
+@@ -181,24 +127,32 @@ def io_place(
+             pin_bpin = odb.dbBPin_create(bterm)
+         pin_bpin.setPlacementStatus("PLACED")
+ 
+-        if side in ("NORTH", "SOUTH"):
+-            # Vertical pin on top/bottom, align X to ITerm center
+-            rect = odb.Rect(0, 0, int(v_width), int(v_length + v_extension))
+-            # Compute edge Y position
+-            y = ury - int(v_length) if side == "NORTH" else lly - int(v_extension)
+-            # Clamp X inside die for the body width
+-            x = int(max(llx, min(cx - v_width // 2, urx - v_width)))
+-            rect.moveTo(x, int(y))
+-            odb.dbBox_create(pin_bpin, v_layer, *rect.ll(), *rect.ur())
+-        else:
+-            # Horizontal pin on left/right, align Y to ITerm center
+-            rect = odb.Rect(0, 0, int(h_length + h_extension), int(h_width))
+-            # Compute edge X position
+-            x = urx - int(h_length) if side == "EAST" else llx - int(h_extension)
+-            # Clamp Y inside die for the body width
+-            y = int(max(lly, min(cy - h_width // 2, ury - h_width)))
+-            rect.moveTo(int(x), y)
+-            odb.dbBox_create(pin_bpin, h_layer, *rect.ll(), *rect.ur())
++        # This flow has no router (DetailedRouting/RCX are substituted out), so a
++        # top-level port connects to its driver(s) ONLY by geometric overlap. Every
++        # tile is inset from the die edge by FABULOUS_HALO_SPACING, so a BPin placed
++        # on the die edge floats and the net is split at extraction ("Top level cell
++        # failed pin matching"). Place a pin shape directly over EVERY iterm of the
++        # net, on that terminal's own layer: single-driver ports (e.g. FrameData)
++        # get one shape; fan-out globals (e.g. UserCLK -> all column terminators)
++        # get one per terminal so they all unify under this port at extraction.
++        for iterm in iterms:
++            ibox: odbRectLike = iterm.getBBox()
++
++            iterm_layer = None
++            for mpin in iterm.getMTerm().getMPins():
++                geometry = mpin.getGeometry()
++                if geometry:
++                    iterm_layer = geometry[0].getTechLayer()
++                    break
++            if iterm_layer is None:
++                iterm_layer = h_layer
++
++            # Cover the iterm bbox (clamped inside the die) on the iterm's layer.
++            x_lo = int(max(llx, min(ibox.xMin(), urx - 1)))
++            y_lo = int(max(lly, min(ibox.yMin(), ury - 1)))
++            x_hi = int(min(urx, max(ibox.xMax(), x_lo + 1)))
++            y_hi = int(min(ury, max(ibox.yMax(), y_lo + 1)))
++            odb.dbBox_create(pin_bpin, iterm_layer, x_lo, y_lo, x_hi, y_hi)
+ 
+ 
+ if __name__ == "__main__":
