@@ -11,6 +11,8 @@ result-*
 
 # Bootstrap experiment logs + local scratch scripts (canonical commands live in docs/)
 /FABulous_work/*.log
+/FABulous_work/*.mem
+/FABulous_work/*_report.txt
 /FABulous_work/_logs/
 /FABulous_work/*.sh
 

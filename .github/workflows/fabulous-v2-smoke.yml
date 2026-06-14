@@ -408,3 +408,117 @@ jobs:
           path: synth_output.txt
           if-no-files-found: warn
           retention-days: 2
+
+  # ---------------------------------------------------------------------------
+  # Issue #10 Task C: sky130A FABRIC STITCHING (gen_fabric_macro).
+  # Composes the hardened tile macros from `t2-sky130-tile-hardening` into the
+  # full fabric macro. Upstream gds-flow-ci.yml DELIBERATELY EXCLUDES sky130A
+  # from its fabric-stitching matrix ("will get kill by github") — stock GitHub
+  # runners (4 vCPU / 16 GB) cannot complete sky130A fabric stitch. This job is
+  # therefore DOCUMENTATION of that resource boundary, not a gate: it runs on
+  # dispatch, captures the stitched GDSII if the runner survives, or the
+  # reproducible kill/OOM blocker if it does not. NEVER fails the workflow.
+  # workflow_dispatch only. Mirrors upstream's fabric-stitching steps + PDK pin.
+  # ---------------------------------------------------------------------------
+  gds-fabric-stitch:
+    name: 'GDS fabric stitch: sky130A (issue #10, dispatch only, expected-kill)'
+    if: github.event_name == 'workflow_dispatch'
+    needs: t2-sky130-tile-hardening
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Checkout FABulous at the pinned ref (workspace root)
+        uses: actions/checkout@v6
+        with:
+          repository: FPGA-Research/FABulous
+          ref: ${{ env.FAB_REF }}
+          fetch-depth: 0
+
+      - name: Verify pinned ref (reproducibility guard)
+        shell: bash
+        run: |
+          set -euo pipefail
+          head="$(git rev-parse HEAD)"
+          if [ "${head#"${FAB_REF}"}" = "$head" ]; then
+            echo "FAIL: HEAD ($head) does not start with expected commit ${FAB_REF}"
+            exit 1
+          fi
+          echo "OK: at ${FAB_REF}"
+
+      - name: Prepare Nix environment (upstream composite, pinned)
+        uses: ./.github/actions/prepare_nix_environment
+
+      - name: Download hardened tile project (from t2)
+        uses: actions/download-artifact@v4
+        with:
+          name: tile-project-sky130A
+
+      - name: Unpack tile project
+        shell: bash
+        run: tar --zstd -xf tile-project.tar.zst
+
+      - name: Run sky130A fabric stitching (gen_fabric_macro)
+        shell: bash
+        env:
+          # Same PDK pin as the tile harden + #7 bootstrap: gen_fabric_macro re-runs
+          # P&R and needs the identical sky130A PDK the tiles were hardened against.
+          FAB_PDK_HASH: 8afc8346a57fe1ab7934ba5a6056ea8b43078e71
+        run: |
+          set -uo pipefail
+          export PDK_ROOT="$PWD/.pdk"            # isolated; never reuse a local ~/.ciel
+          # Do NOT fail the job here — a kill/OOM on a stock runner is the documented
+          # outcome we are capturing. The verify step classifies the result.
+          nix develop --command bash -c "
+            set -e
+            FABulous --project-dir test_project run 'gen_fabric_macro'
+          " > fabric_stitching_output.txt 2>&1 || true
+          echo '--- tail of fabric stitch output ---'; tail -60 fabric_stitching_output.txt || true
+
+      # Informational only (never exits non-zero): classify stitched vs blocker.
+      # Manufacturability parser mirrors upstream gds-flow-ci.yml fabric-stitching.
+      - name: Classify fabric-stitch outcome (informational)
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          f=fabric_stitching_output.txt
+          if [ ! -s "$f" ]; then
+            echo "BLOCKER: no fabric_stitching_output.txt produced (runner killed before any output?)"
+            exit 0
+          fi
+          sed -n '/Report Manufacturability/,$p' "$f" > fabric_report.txt || true
+          if [ -s fabric_report.txt ]; then
+            echo "=== fabric stitching manufacturability report ==="
+            tail -200 fabric_report.txt
+            for check in "Antenna" "LVS" "DRC"; do
+              results=$(awk -v c="$check" 'prev == "* " c { print } { prev = $0 }' fabric_report.txt)
+              total=$(printf "%s\n" "$results" | grep -c .)
+              passed=$(printf "%s\n" "$results" | grep -c "^Passed")
+              echo "INFO: ${check} ${passed}/${total} passed"
+            done
+            echo "RESULT: fabric stitch reached manufacturability reporting on sky130A."
+          else
+            echo "RESULT: fabric stitch did NOT reach manufacturability — likely the documented sky130A resource blocker."
+            echo '--- last lines / error signature ---'
+            grep -niE "Killed|Out of memory|MemoryError|FlowError|Traceback|error" "$f" | tail -30 || true
+          fi
+
+      - name: Package fabric output
+        if: always()
+        shell: bash
+        run: |
+          tar --zstd -cf fabric-output-sky130A.tar.zst \
+            --ignore-failed-read \
+            test_project/Fabric \
+            test_project/.FABulous \
+            fabric_stitching_output.txt \
+            fabric_report.txt || true
+
+      - name: Upload fabric artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fabric-output-sky130A
+          path: fabric-output-sky130A.tar.zst
+          if-no-files-found: warn
+          retention-days: 7

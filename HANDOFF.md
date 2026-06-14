@@ -1,5 +1,55 @@
 # HANDOFF
 
+## 2026-06-14 — Issue #10: standard example fabric → sky130A GDSII baseline
+
+**Branch:** `feature/10-fabric-baseline` (off `main`; do not push/merge `main`)
+
+**Goal:** Issue #10 — take the standard FABulous `v2.0.0b5` example fabric through the official
+hierarchical GDS flow on sky130A (RTL → all tile macros → fabric stitch) and record a reproducible
+baseline. (#10 title says "no-DSP" but body was relaxed to the standard demo fabric, which is the
+only shipped example and **contains DSP** — DSP tiles harden as ordinary macros.)
+
+**Result:**
+- **Tiles (A+B) = PASS.** All **13/13** demo tiles hardened to GDS; manufacturability **13/13**
+  Antenna/LVS/DRC. ~**15 min** wall (warm), **2.1 GB** peak RSS. Per-tile GDS/LEF/def/nl/pnl/sdc/spef/
+  metrics. **No `*.lib`** emitted (no macro timing model); DRC verdict is KLayout (Magic DRC skipped).
+- **Fabric stitch (C) = GDSII produced, signoff FAILS.** `gen_fabric_macro` on sky130A **was NOT
+  resource-killed** on this 24c/29 GB host (upstream skips sky130A as "killed by github" = stock
+  4c/16 GB limit): it streamed `eFPGA.gds` (~52 MB, die ≈9.76 mm²) in **4 min 29 s**, **~18.8 GB peak
+  RSS**, then `FlowError` — **1591 LVS errors**. LVS fingerprint: devices 151=151, nets differ by 9,
+  "failed pin matching" on inter-tile routing ports — a reproducible *signoff* blocker.
+- **Wiki check (user-requested):** `~/wiki/fpga_tapeout/synthesis/{pdn-lvs-fix,core-ring-lvs-fix,
+  opensta-write-lib-bug}.md` document the **same top-level-LVS signature** from a prior OpenLane-classic
+  FPGA assembly (drove 155→0 via met5-crossing + `FP_PDN_CORE_RING`). Recorded as **prior-art
+  hypotheses, NOT adopted** (different flow; FABulous already uses dense PDN). See baseline §C.2.
+
+### Changes made (this branch)
+- `docs/fabric-gds-baseline.md` (new) — full #10 baseline: pins, commands, tile manufacturability
+  table, artifact inventory, disk/cache, fabric-stitch outcome + LVS fingerprint + prior-art fixes.
+- `.github/workflows/fabulous-v2-smoke.yml` — new dispatch-only `gds-fabric-stitch` job (Task C;
+  `needs: t2-sky130-tile-hardening`, never-fails, documents the sky130A stitch boundary). actionlint
+  clean; YAML parses (5 jobs).
+- `docs/gds-toolchain-bootstrap.md` §9 — deferred→done cross-reference to the #10 baseline.
+- `docs/followup-issue-gds-generation.md` — carried the stray `main` working-tree edit onto this
+  branch (records #10 was posted); committed here so `main` stays clean.
+
+### Validation run
+- Local sky130A flow (warm): tile harden PASS (13/13 manufacturability); fabric stitch GDSII +
+  documented LVS blocker. All outputs under gitignored `FABulous_work/fabulous-v2/` (clean-room intact).
+- `nix run nixpkgs#actionlint` + `yaml.safe_load` on the workflow → clean.
+- Not run: cold-runner CI dispatch of `t2-sky130-tile-hardening` / `gds-fabric-stitch` (needs user push
+  + dispatch) — confirms #7 falsifier #3 (10 GB cache cap) and the stock-runner stitch boundary.
+
+### Next recommended action
+1. **User:** review `feature/10-fabric-baseline`; (optionally) push + `workflow_dispatch` the two
+   sky130A jobs to capture cold-runner timing/disk. Agent will not push/PR without approval.
+2. Open a **fabric-stitch LVS** follow-up issue: diagnose the ~9 unmatched nets (PDN islands vs tile
+   boundary-pin/abstract) per baseline §C.2; then macro `.lib` generation + timing.
+3. Promote the #10 baseline (tile timings, stitch RAM ceiling, LVS signature) to
+   `~/wiki/fpga_stochastic_blocks/experiments/`.
+
+---
+
 ## 2026-06-13 — Issue #7: GDS toolchain bootstrap (OFFICIAL FABulous v2 flow)
 
 **Branch:** `feature/7-gds-toolchain-bootstrap` (off `main`; do not push/merge `main`)
