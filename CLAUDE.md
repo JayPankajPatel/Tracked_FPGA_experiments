@@ -212,6 +212,8 @@ For research-heavy work, toolchain choices, architecture decisions, external dep
 
 The goal is to prevent convenient evidence from becoming trusted infrastructure too early.
 
+Conduct the two passes as **two separate, independent agents** — one optimistic, one pessimistic — each given the same context but the opposite stance, run in parallel (not a single inline self-review). Then reconcile their outputs into the items below.
+
 Run both passes:
 
 1. **Optimistic pass**
