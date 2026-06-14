@@ -1,0 +1,50 @@
+Circuit S_term_single2 contains 0 device instances.
+Circuit contains 0 nets, and 212 disconnected pins.
+Contents of circuit 2:  Circuit: 'S_term_single2'
+Circuit S_term_single2 contains 0 device instances.
+Circuit contains 0 nets.
+
+Circuit S_term_single2 contains no devices.
+
+Contents of circuit 1:  Circuit: 'eFPGA'
+Circuit eFPGA contains 151 device instances.
+  Class: N_term_single2        instances:   1
+  Class: S_term_single         instances:   6
+  Class: N_term_DSP            instances:   1
+  Class: DSP                   instances:   7
+  Class: N_term_RAM_IO         instances:   1
+  Class: W_IO                  instances:  14
+  Class: RegFile               instances:  14
+  Class: RAM_IO                instances:  14
+  Class: S_term_single2        instances:   1
+  Class: S_term_RAM_IO         instances:   1
+  Class: LUT4AB                instances:  84
+  Class: S_term_DSP            instances:   1
+  Class: N_term_single         instances:   6
+Circuit contains 34828 nets.
+Contents of circuit 2:  Circuit: 'eFPGA'
+Circuit eFPGA contains 151 device instances.
+  Class: N_term_single2        instances:   1
+  Class: S_term_single         instances:   6
+  Class: N_term_DSP            instances:   1
+  Class: DSP                   instances:   7
+  Class: N_term_RAM_IO         instances:   1
+  Class: W_IO                  instances:  14
+  Class: RegFile               instances:  14
+  Class: RAM_IO                instances:  14
+  Class: S_term_single2        instances:   1
+  Class: S_term_RAM_IO         instances:   1
+  Class: LUT4AB                instances:  84
+  Class: S_term_DSP            instances:   1
+  Class: N_term_single         instances:   6
+Circuit contains 34828 nets.
+
+Circuit 1 contains 151 devices, Circuit 2 contains 151 devices.
+Circuit 1 contains 34828 nets,    Circuit 2 contains 34828 nets.
+
+
+Final result: 
+Circuits match uniquely.
+.
+Logging to file "/home/jay/Repos/Tracked_FPGA_experiments/FABulous_work/fabulous-v2/fabric_baseline_proj/Fabric/macro/runs/RUN_2026-06-14_08-12-05/49-netgen-lvs/reports/lvs.netgen.rpt" disabled
+LVS Done.

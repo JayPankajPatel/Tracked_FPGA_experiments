@@ -1,5 +1,53 @@
 # HANDOFF
 
+## 2026-06-14 — Issue #12: fabric-stitch LVS blocker RESOLVED (manufacturability-clean fabric)
+
+**Branch:** `feature/12-fabric-lvs-rootcause` (off `feature/10-fabric-baseline`; do not push/merge `main`)
+
+**Goal:** Root-cause the PR #11 / issue #10 sky130A fabric-stitch LVS blocker and drive the standard
+FABulous `v2.0.0b5` example fabric to **manufacturability-clean** (Antenna/LVS/DRC) on the official flow.
+
+**Result: GREEN.** Fabric LVS/DRC/Antenna all pass (`RUN_2026-06-14_08-12-05`); netgen
+`Circuits match uniquely`; nets 34828 = 34828 (was 34837 vs 34828); `eFPGA.gds` 52 MB; ~4.5 min, ~19 GB.
+
+**Root cause (NOT PDN).** The fabric stitch flow has no router and connects tiles by abutment;
+`fabulous/fabric_generator/gds_generator/script/fabric_io_place.py` placed every top-level IO BPin on
+the **die edge** while every tile is 1 µm halo-inset (`FABULOUS_HALO_SPACING`), with no wire — so all
+~1581 top ports floated off their terminals and netgen failed top-level pin matching. The wiki PDN
+notes matched the fingerprint *shape* (151=151 devices, +9 nets) but **zero** unmatched nets are power.
+Localized entirely from the on-disk PR #11 run (no re-run needed). Two-pass review corrected an initial
+"global-only" mis-read → it was uniform across all top ports.
+
+**Fix.** Place a pin shape over **every** iterm of each top-level port, on the terminal's own layer:
+single-driver ports get one shape; fan-out globals (`UserCLK` → 10 column terminators) get one each so
+they unify at extraction. Tiles/PDN/grid floorplan untouched.
+
+### Changes made (this branch)
+- `docs/issue-12/` (new) — `root-cause.md` (diagnosis + two-pass + before/after), `README.md`,
+  `patches/fabric_io_place-overlap-iterm.patch` (the fix; +37/−83, applies cleanly on `v2.0.0b5`),
+  `apply-fix.sh` (idempotent), `evidence/` (failing run), `evidence-after/` (green run).
+- `.github/workflows/fabulous-v2-smoke.yml` — `gds-fabric-stitch` job now checks out this repo, applies
+  the patch, and **asserts** manufacturability when reached (still non-failing on stock-runner OOM).
+  actionlint clean; YAML parses (5 jobs).
+- `docs/fabric-gds-baseline.md` — §C blocker marked RESOLVED with cross-reference.
+
+### Validation
+- Local sky130A re-stitch with the patch: **Antenna/LVS/DRC Passed**, `Circuits match uniquely`, exit 0.
+- Patch applies cleanly to pristine `v2.0.0b5` blob `41d9a13`; `apply-fix.sh` idempotent.
+- `nix run nixpkgs#actionlint` + `yaml.safe_load` on the workflow → clean.
+- Not run: cold-runner CI dispatch (stock 4c/16 GB still OOMs at ~19 GB peak — documented, non-failing).
+
+### Next recommended action
+1. **User:** review `feature/12-fabric-lvs-rootcause`; PR is being opened linking #12. Only the user
+   merges `main`.
+2. Follow-up (separate issue): macro `.lib`/SPEF generation + timing closure (still out of scope here;
+   tiles black-boxed for timing, generic fallback SDC).
+3. Consider upstreaming the `fabric_io_place.py` fix to FABulous (sky130A fabric-stitch is excluded from
+   upstream CI for resources, so this path was unvalidated upstream).
+4. Promote the root cause to `~/wiki/fpga_stochastic_blocks/experiments/`.
+
+---
+
 ## 2026-06-14 — Issue #10: standard example fabric → sky130A GDSII baseline
 
 **Branch:** `feature/10-fabric-baseline` (off `main`; do not push/merge `main`)
