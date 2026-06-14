@@ -69,9 +69,7 @@ Contains local work and experiments involving OpenFPGA, FABulous, OpenLane, Libr
 - `HANDOFF.md`: Running project log. Read this before starting a session and update it at the end. It should describe project state, changes made, open questions, and next actions.
 - `Librelane_work/`: ASIC implementation and flow work targeting SkyWater 130nm.
 - `README.md`: General project overview. Currently sparse, but should be populated over time.
-- `Stocastic_Blocks/`: RTL, simulations, tests, and supporting files for stochastic computing block development.
-
-Note: `Stocastic_Blocks` appears to use the misspelled directory name currently present in the repo. Consider renaming it to `Stochastic_Blocks` early if scripts and references have not yet accumulated.
+- `Stochastic_Blocks/`: RTL, simulations, tests, and supporting files for stochastic computing block development.
 
 ## Project Tracking
 
