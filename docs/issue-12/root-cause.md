@@ -1,18 +1,28 @@
 # Issue #12 — Fabric-stitch LVS blocker: root cause
 
 **Status:** Root cause localized from on-disk evidence (PR #11 run
-`RUN_2026-06-13_22-57-46`). **Not PDN.** Fix in progress.
+`RUN_2026-06-13_22-57-46`); mechanism corrected by the Phase-2 two-pass review (see end). **Not PDN.**
+Fix in progress.
 **Env (inherited #7/#10, unchanged):** FABulous `v2.0.0b5` `4a2047b`, LibreLane `v3.0.3`,
 sky130A `FAB_PDK_HASH=8afc8346…`.
 
 ## TL;DR
 
-The stitched fabric's **top-level IO pins for the high-fanout global nets are not electrically
-unified with the fabric-spanning internal (abutment) net.** netgen matches every tile and simple
-per-tile IO, then fails **top-level port matching only**, on exactly the global config/clock/BRAM
-signals. It is **not** a PDN power-island problem (the wiki `pdn-lvs-fix.md` matches the fingerprint
-*shape* but **zero** unmatched nets are power) and **not** a tile defect (tiles are 13/13 LVS-clean and
-their blackboxes matched: *"Device classes eFPGA and eFPGA are equivalent"*).
+**Every one of the ~1581 top-level fabric IO pins is physically disconnected from its tile terminal.**
+The fabric-stitch flow disables routing and connects by abutment; the custom IO-placement step
+(`fabric_io_place.py`) slams each top-level BPin to the **die edge** with **no wire**, while every tile
+is inset by the `FABULOUS_HALO_SPACING` (1 µm) — so the pin metal never overlaps the tile pin metal.
+netgen matches all 151 tile instances ("device classes equivalent") then fails **top-level port matching
+only**, uniformly across all top ports. It is **not** a PDN power-island problem (the wiki
+`pdn-lvs-fix.md` matches the fingerprint *shape* but **zero** unmatched nets are power) and **not** a
+tile defect (tiles are 13/13 LVS-clean and their blackboxes matched).
+
+> **Correction (Phase-2 review):** an earlier draft claimed this was *global-only* and that per-tile IO
+> (`A_I_top`) *matched*. That was wrong — `Tile_X0Y10_A_I_top` is in the unmatched set
+> (`lvs.netgen.rpt` lines 8878/9812/12105), and even its perimeter `W_IO` tile sits 1 µm inside the die
+> edge, so its edge-placed pin floats too. The failure is **uniform across all top ports**; the global
+> buses are just the largest families. The fix is unchanged in direction (overlap pin↔terminal) and is
+> actually simpler for being uniform.
 
 ## Evidence
 
@@ -26,18 +36,19 @@ netgen step `49-netgen-lvs` compares (see `evidence/lvs_script.lvs`):
 Both have **151 devices** = the tile macro instances (84 LUT4AB + 14×{RegFile,RAM_IO,W_IO} + 7 DSP +
 terminators). Result: `Top level cell failed pin matching` (+9 nets, 1581 unmatched pins).
 
-The 1581 unmatched top-level pins are a **structured, global-only** set:
+The 1581 unmatched top-level pins span **all** top-port families (largest first):
 
-| signal | width | role |
-|---|---|---|
-| `FrameData[511:0]` | 512 | global configuration data bus |
-| `FrameStrobe[199:0]` | 200 | global configuration strobe |
-| `UserCLK` | 1 | global user clock |
-| `Tile_X*Y*_{FAB2RAM,RAM2FAB}_*` | many | BRAM column signals (span the RAM column) |
-| `Tile_X*Y*_*_config_C_bit*`, `*_{A,B}_{I,O,T}_top` | many | per-tile config / BRAM-block IO |
+| signal | role |
+|---|---|
+| `FrameData[511:0]` (512), `FrameStrobe[199:0]` (200) | global configuration data / strobe |
+| `Tile_X*Y*_{FAB2RAM,RAM2FAB}_*` | BRAM column signals |
+| `Tile_X*Y*_*_config_C_bit*`, `Config_accessC_bit*` | per-tile config |
+| `Tile_X*Y*_{A,B}_{I,O,T}_top` (incl. `A_I_top`, `A_O_top`) | per-tile / BRAM-block IO |
+| `UserCLK` | global user clock |
 
-Plain per-tile external IO (`Tile_X*Y*_A_I_top`, `A_O_top`, …) **matched** — they are absent from the
-unmatched list.
+Per-tile external IO is **in** the failing set, not absent (corrected in Phase 2) — the break is
+uniform, not global-only. netlist fanout per top net: FrameData/FrameStrobe bits → 1 tile each
+(matching the source `pnl.v`, so realizing it is **not** a cosmetic pass); `UserCLK` → 10 tiles.
 
 ### The asymmetry that names the mechanism (`lvs.netgen.rpt`)
 
@@ -51,8 +62,8 @@ In the Magic-extracted layout body, each abutment net is named after a **tile-in
 its canonical name is an internal node, **not** the top-level port `FrameData[0]`. The top-level pin
 `FrameData[0]` (placed by the fabric IO-placement step) is a **separate node** that never merges with
 that internal net. Source `pnl.v` instead wires tiles from bit-shuffled slices of the real port bus
-(`.FrameData({FrameData[351], FrameData[383], …})`). Net correspondence therefore breaks at the boundary
-for these buses only.
+(`.FrameData({FrameData[351], FrameData[383], …})`). Net correspondence breaks at the boundary for
+every top port the same way (the buses are just the most visible).
 
 ## Logically connected, physically split (the decisive evidence)
 
@@ -73,19 +84,19 @@ geometric extraction therefore yields two separate nodes. This reconciles the `+
 disconnected pins: the netlist intent is correct (few net-count delta), the break is purely
 physical→extraction (1581 unbridged top pins).
 
-### Contrast: a matched per-tile IO vs a failed global net
+### Uniform gap — even the best-case perimeter port floats
 
-| net | connected tile | tile placement | pin placement | outcome |
+| net | connected tile | tile placement | pin box (met3) | gap |
 |---|---|---|---|---|
-| `Tile_X0Y10_A_I_top` ✅ | `Tile_X0Y10_W_IO` | x≈1.38µm (**west perimeter**) | west edge x≈0.3µm | pin overlaps tile terminal → merged |
-| `FrameData[0]` ❌ | `Tile_X1Y0_N_term_single` | x≈247µm (**interior col 1**) | west edge x≈0.3µm | ~247µm gap, no wire → split |
+| `Tile_X0Y10_A_I_top` (perimeter) | `Tile_X0Y10_W_IO` | x≈1.38µm (west perimeter) | x∈[0, 0.6]µm | ~0.78µm (halo inset) → **split** |
+| `FrameData[0]` (interior) | `Tile_X1Y0_N_term_single` | x≈247µm (interior col 1) | x∈[0, 0.6]µm | ~247µm → **split** |
 
-`fabric_io_place.py` chooses the die-edge *side* from the master tile's mTerm and aligns only the
-cross-axis to the iterm centre — it ignores whether the connected **instance** is on the die perimeter.
-Perimeter IO terminals reach the boundary, so the edge pin overlaps; interior/global-net terminals do
-not, so the edge pin floats.
+`FABULOUS_HALO_SPACING: [1,1,1,1]` insets **every** tile 1 µm from the die edge, while
+`fabric_io_place.py` slams every BPin to the exact die boundary with `--hor-extension 0 / --ver-extension
+0` and draws **no wire**. So *no* tile terminal reaches the boundary — every top pin floats, perimeter
+(~1 µm) and interior (up to ~247 µm) alike. That is why all ~1581 ports fail uniformly.
 
-## Why global nets break but per-tile IO doesn't
+## Mechanism
 
 The fabric flow (`fabulous/fabric_generator/gds_generator/flows/fabric_macro_flow.py`) is **macro
 abutment with no router** — it substitutes out `OpenROAD.GlobalPlacement / DetailedPlacement /
@@ -93,26 +104,20 @@ DetailedRouting / RCX` (`subs = {…: None}`) and connects tiles purely by abutt
 external pins are placed by the custom step `Odb.FABulousFabricIOPlacement` →
 `script/fabric_io_place.py`.
 
-`fabric_io_place.py` (per top-level BTerm):
-1. `iterm = net.getITerms()[0]` — picks the **first** instance terminal on the net.
-2. Places the BPin **at the die edge**, aligned in the cross-axis to that one iterm’s centre, on the
-   side derived from the master tile’s mTerm.
-3. Creates **no wire** — it relies on the BPin geometrically **overlapping** tile pin metal.
+`fabric_io_place.py` (per top-level BTerm): takes `iterm = net.getITerms()[0]`, derives the die-edge
+*side* from the master's mTerm, places the BPin **at the die edge** aligned only in the cross-axis to the
+iterm centre, and creates **no wire** — relying on the BPin geometrically overlapping tile pin metal.
+Because every tile is halo-inset, that overlap never happens → all top ports disconnect at extraction.
 
-- **Per-tile IO** → net has **one** iterm, on a perimeter tile whose pin sits at the die edge → the
-  edge BPin overlaps it → connected → LVS matches.
-- **Global buses** (FrameData/FrameStrobe/UserCLK/BRAM) → net has **many** iterms; `iterms[0]` is
-  arbitrary (often interior). The edge BPin aligns to that interior iterm and overlaps **no** boundary
-  metal of the spanning net → top pin stays electrically isolated → 1581 disconnected pins.
+Upstream CI (`.github/workflows/gds-flow-ci.yml`, `fabric-stitching` job: real gate — `fail-fast: false`,
+no `continue-on-error`, exit-1 on LVS) runs this for `ihp-sg13g2`/`gf180mcuD` but **excludes sky130A**
+("will get kill by github" — resources), so sky130A fabric LVS is an **unvalidated upstream path**. The
+script is PDK-agnostic, so this gap is *likely* present on the other PDKs too unless their tile geometry
+happens to reach the die edge — **not yet verified** (would need a green run on those PDKs).
 
-This fragility is **net-ordering dependent and high-fanout-only**, which exactly matches the failure
-set. Upstream CI (`.github/workflows/gds-flow-ci.yml`) **gates fabric LVS/DRC/antenna** for
-`ihp-sg13g2` and `gf180mcuD` but **excludes sky130A** ("will get kill by github" — resources), so
-sky130A fabric LVS is an **unvalidated upstream path**.
+## Fix direction (validated by the Phase-2 two-pass review)
 
-## Fix direction (to validate in Phase 2 two-pass review before applying)
-
-The break is **physical** (pin metal genuinely does not touch the interior tile terminal), so an
+The break is **physical** (pin metal genuinely does not touch the tile terminal), so an
 extraction/label-only change cannot fix it — the geometry must connect. Make the top-level IO pin
 physically reach its tile terminal, inside the official flow. Candidate, smallest-first:
 
@@ -130,6 +135,33 @@ physically reach its tile terminal, inside the official flow. Candidate, smalles
 
 **Out:** copying OpenLane-classic PDN/core-ring values (ruled out — not power); re-hardening tiles
 (13/13 clean, blackboxes matched); changing the v2.0.0b5 ref; adopting mole99.
+
+## Phase-2 two-pass review — reconciliation
+
+Two independent agents (optimistic / pessimistic) reviewed the fix on the same evidence.
+
+- **Default recommendation:** patch `fabric_io_place.py` so each BPin's metal **overlaps its iterm**
+  (place the pin box on the iterm geometry on the iterm's own layer), uniformly for all top ports. The
+  iterm centre (`cx,cy`) is already computed; the connection needs **no router**.
+- **Fallback:** if an interior BPin trips a "pins on die edge" expectation or DRC, keep the pin on the
+  edge and add a minimal connecting shape, or place the pin at the nearest on-net boundary point.
+- **Evidence still missing:** (1) whether the same flow actually passes fabric LVS on
+  `ihp-sg13g2`/`gf180mcuD` (CI gate is real but a green run was not observed); (2) whether an interior
+  BPin is acceptable to later checks. Both are resolved empirically by the cheap loop below.
+- **Minimum health-check (seconds, no full re-stitch):** re-run only the preserved step-23 command
+  (`23-odb-fabulousfabricioplacement/COMMANDS`: `openroad -python fabric_io_place.py … 22-…/eFPGA.odb`)
+  to a scratch dir, then grep the new DEF to confirm each PIN box now overlaps its iterm. Then resume
+  steps 23→49 (IO-place → extract → netgen-LVS) for the real LVS verdict, reusing steps 01-22 on disk.
+- **Non-goals / do-not-copy:** OpenLane-classic PDN/core-ring values (not power); tile re-harden
+  (13/13 clean); changing the v2.0.0b5 ref; mole99/external backend.
+- **Deliverable hygiene (load-bearing):** `FABulous_work/fabulous-v2/` is gitignored. The fix must be a
+  **tracked patch** (`docs/issue-12/patches/`) + before/after evidence, not just an in-place edit — an
+  in-place green run is signal, not a deliverable.
+
+### Key correction from the review
+The earlier "global-only / per-tile-IO-matches" framing was **wrong**: all ~1581 top ports fail
+uniformly (per-tile `A_I_top` included) because of the halo inset + edge-slam + no-wire, not a
+high-fanout/`iterms[0]`-ordering effect. The fix direction is unchanged and is simpler for being uniform.
 
 ## Before/after fingerprint (to fill in Phase 3)
 
