@@ -421,7 +421,7 @@ jobs:
   # workflow_dispatch only. Mirrors upstream's fabric-stitching steps + PDK pin.
   # ---------------------------------------------------------------------------
   gds-fabric-stitch:
-    name: 'GDS fabric stitch: sky130A (issue #10, dispatch only, expected-kill)'
+    name: 'GDS fabric stitch: sky130A (issue #12 LVS fix, dispatch only)'
     if: github.event_name == 'workflow_dispatch'
     needs: t2-sky130-tile-hardening
     runs-on: ubuntu-latest
@@ -444,6 +444,20 @@ jobs:
             exit 1
           fi
           echo "OK: at ${FAB_REF}"
+
+      # The FABulous checkout is the workspace root, so fetch THIS repo (for the
+      # tracked issue #12 patch) into a side dir and apply it. The patch fixes
+      # fabric_io_place.py so top-level ports overlap their tile terminals -> the
+      # stitched fabric passes LVS (was 1591 errors). See docs/issue-12/.
+      - name: Checkout this repo for the issue #12 fix
+        uses: actions/checkout@v6
+        with:
+          path: _thisrepo
+          fetch-depth: 1
+
+      - name: Apply issue #12 fabric IO-placement fix
+        shell: bash
+        run: _thisrepo/docs/issue-12/apply-fix.sh .
 
       - name: Prepare Nix environment (upstream composite, pinned)
         uses: ./.github/actions/prepare_nix_environment
@@ -476,7 +490,7 @@ jobs:
 
       # Informational only (never exits non-zero): classify stitched vs blocker.
       # Manufacturability parser mirrors upstream gds-flow-ci.yml fabric-stitching.
-      - name: Classify fabric-stitch outcome (informational)
+      - name: Classify fabric-stitch outcome
         if: always()
         shell: bash
         run: |
@@ -490,15 +504,30 @@ jobs:
           if [ -s fabric_report.txt ]; then
             echo "=== fabric stitching manufacturability report ==="
             tail -200 fabric_report.txt
+            # With the issue #12 IO-placement fix applied, a fabric that REACHES
+            # manufacturability must pass Antenna/LVS/DRC. A stock 4c/16GB runner may
+            # still OOM before this point (~19 GB peak) — that path stays non-failing
+            # above (handled by the else branch). Reaching the report but failing a
+            # check is a real regression, so fail here.
+            fail=0
             for check in "Antenna" "LVS" "DRC"; do
               results=$(awk -v c="$check" 'prev == "* " c { print } { prev = $0 }' fabric_report.txt)
               total=$(printf "%s\n" "$results" | grep -c .)
               passed=$(printf "%s\n" "$results" | grep -c "^Passed")
-              echo "INFO: ${check} ${passed}/${total} passed"
+              if [ "$total" -eq 0 ] || [ "$total" -ne "$passed" ]; then
+                echo "FAIL: ${check} ${passed}/${total} passed"
+                fail=1
+              else
+                echo "OK: ${check} ${passed}/${total} passed"
+              fi
             done
-            echo "RESULT: fabric stitch reached manufacturability reporting on sky130A."
+            if [ "$fail" -ne 0 ]; then
+              echo "RESULT: fabric stitch reached manufacturability but a check FAILED (regression)."
+              exit 1
+            fi
+            echo "RESULT: fabric stitch is manufacturability-clean on sky130A (issue #12)."
           else
-            echo "RESULT: fabric stitch did NOT reach manufacturability — likely the documented sky130A resource blocker."
+            echo "RESULT: fabric stitch did NOT reach manufacturability — likely the documented sky130A resource blocker (stock-runner OOM, ~19 GB peak)."
             echo '--- last lines / error signature ---'
             grep -niE "Killed|Out of memory|MemoryError|FlowError|Traceback|error" "$f" | tail -30 || true
           fi
