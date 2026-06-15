@@ -92,12 +92,29 @@ End-to-end behavioral sim, **no PDK/P&R** (`tools/run_functional_sim.sh`, baseli
 - Note: the shrunk fabric can't run THIS demo (16 IO < demo needs); its own layer-3 check needs a
   small fit-for-purpose user design + regenerated bitstream (flag for post-harden).
 
+### STAGE-2 HARDEN COMPLETE — shrunk Caravel macro is manufacturability-CLEAN (2026-06-14)
+Ran `tools/harden_caravel_fabric.sh` (gen_all_tile_macros + gen_fabric_macro, #12 patch applied) in
+the Nix devshell. **Result: GREEN.**
+- **LVS:** `Circuits match uniquely`, 0 unmatched device/net/pin — Passed ✅.
+- **DRC:** `No DRC violations found` (KLayout; Magic DRC skipped as in baseline).
+- **Antenna:** `route__antenna_violation__count = 0` — Passed ✅.
+- **Macro size:** **1989.96 × 2457.52 µm** (4.89 mm²) — matches prediction (1987×2455); descriptor
+  `caravel_shrunk.yml` updated to measured. Conformance vs Caravel still CONFORMANT (2225×2748 +ovh
+  vs 2920×3520).
+- **RAM:** fabric-stitch peak RSS 9.25 GB; system peak ~11.9 GB. **Dominant consumer = Magic GDS
+  streamout (~9 GB)** — about 60% of baseline 14-row's ~19 GB, as predicted from halving the fabric.
+  Stitch wall time 2:50. (Answers the RAM question: ample headroom; no tuning needed.)
+- Launch bug fixed mid-session: `nix develop` must run from `$FV` (shellHook derives PYTHONPATH from
+  $PWD), else `ModuleNotFoundError: fabulous`.
+
+We now have a **second LVS-clean macro** (Caravel-fitting) alongside the #12 14-row macro.
+
 ### Next recommended action
-1. **Stage 2 harden (hours, Nix devshell):** run the LibreLane GDS flow on `fabric_caravel_proj`
-   (`gen_all_tile_macros` + `gen_fabric_macro`) **with the #12 `fabric_io_place` patch** at stitch;
-   capture the new macro LEF SIZE; re-diff `efpga_top_caravel_bb.v`. Then wrap in Caravel
-   `user_project_wrapper` (Caravel shim: contract → io_in/io_out/io_oeb + Wishbone) and run
-   chip-level DRC/LVS/Antenna.
+1. **Wrap in Caravel `user_project_wrapper`:** write the Caravel shim (contract → io_in/io_out/io_oeb
+   + Wishbone→SelfWrite bridge), instantiate `chip_top` at shrunk params (regenerate
+   `efpga_top_caravel_bb.v` from the hardened nl if needed), and run chip-level DRC/LVS/Antenna.
+2. **Functional check on the shrunk fabric:** needs a small fit-for-purpose user design (16 IO) +
+   regenerated bitstream (the baseline 16-bit demo doesn't fit); then re-run the layer-3/4 TBs.
 2. **Functional layer 3-4:** drive `Test/` (now also for the shrunk fabric) to emit a golden
    bitstream + reference `io_out`; wire the end-to-end + shim-replay TB against `chip_top` (confirms
    adapter cadence vs the real controller, and T_top/oeb polarity).
