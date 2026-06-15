@@ -14,12 +14,16 @@
 `default_nettype none
 module chip_top #(
     // --- fabric size knobs (defaults = baseline 14-row demo fabric) ---
+    // These size chip_top's own internal nets and the io_mux; they must MATCH
+    // the (hardcoded) widths of the generated eFPGA_top for the chosen fabric.
+    // A different fabric size means REGENERATING eFPGA_top, not just changing
+    // these — eFPGA_top has no width parameters (see efpga_top_bb.v).
     parameter NumberOfRows    = 14,
     parameter NumberOfCols    = 10,
     parameter FrameBitsPerRow = 32,
     parameter MaxFramesPerCol = 20,
-    parameter USERIO_W        = 28,           // fabric user-IO triples
-    parameter CONFIG_C_W      = 56,           // = NumberOfRows*4
+    parameter USERIO_W        = 28,           // fabric user-IO triples (eFPGA_top [27:0])
+    parameter CONFIG_C_W      = 56,           // config_C monitors (eFPGA_top [55:0])
     // --- MPW knobs ---
     parameter N_USER_IO       = 28,           // chip user pins exposed (<= USERIO_W)
     parameter DROP_CONFIG_C   = 1,            // 1 = config_C monitors not exposed
@@ -46,15 +50,16 @@ module chip_top #(
     wire efpga_SelfWriteStrobe; wire [31:0] efpga_SelfWriteData;
     wire efpga_Rx, efpga_ComActive, efpga_ReceiveLED;
 
-    // ---- config adapter (thin; preserves FABulous frame protocol) ----
+    // ---- config adapter (thin; serial -> SelfWriteData/SelfWriteStrobe, the
+    //      path the FABulous oracle drives; preserves the frame protocol) ----
     config_adapter u_cfg (
         .clk(clk), .rst_n(rst_n),
         .cfg_sclk(cfg_sclk), .cfg_sdata(cfg_sdata),
         .cfg_busy(cfg_busy), .cfg_done(cfg_done),
         .efpga_CLK(efpga_CLK), .efpga_resetn(efpga_resetn),
-        .efpga_s_clk(efpga_s_clk), .efpga_s_data(efpga_s_data),
         .efpga_SelfWriteStrobe(efpga_SelfWriteStrobe),
         .efpga_SelfWriteData(efpga_SelfWriteData),
+        .efpga_s_clk(efpga_s_clk), .efpga_s_data(efpga_s_data),
         .efpga_Rx(efpga_Rx),
         .efpga_ComActive(efpga_ComActive), .efpga_ReceiveLED(efpga_ReceiveLED)
     );
@@ -66,10 +71,11 @@ module chip_top #(
     );
 
     // ---- fabric (macro + controller + BRAM) ----
+    // Only the real eFPGA_top parameters are passed; widths are fixed in the
+    // generated module per fabric size (no CONFIG_C_W/USERIO_W params exist).
     eFPGA_top #(
         .NumberOfRows(NumberOfRows), .NumberOfCols(NumberOfCols),
-        .FrameBitsPerRow(FrameBitsPerRow), .MaxFramesPerCol(MaxFramesPerCol),
-        .CONFIG_C_W(CONFIG_C_W), .USERIO_W(USERIO_W)
+        .FrameBitsPerRow(FrameBitsPerRow), .MaxFramesPerCol(MaxFramesPerCol)
     ) u_efpga (
         .A_config_C(A_config_C), .B_config_C(B_config_C),
         .Config_accessC(Config_accessC),
