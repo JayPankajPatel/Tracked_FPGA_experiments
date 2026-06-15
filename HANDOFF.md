@@ -1,5 +1,33 @@
 # HANDOFF
 
+## 2026-06-15 — Issue #16: Caravel CC2509 integration (modern harness) — in progress
+
+**Branch:** `feature/16-chip-wrapper-efpga`. **PR opened** linking #16.
+
+**What this increment did (after the shrunk macro hardened clean):**
+- User chose to pursue **Caravel via the shrunk fabric**. Cloned the **current ChipFoundry
+  `caravel_user_project` (tag CC2509)** (gitignored, clean-room) and diffed it vs the 2021 prior art
+  (`open_eFPGA`, `eFPGA_v3_caravel`): **wrapper interface identical**; harness moved efabless→ChipFoundry,
+  PDK newer (open_pdks `3e0e31d`), flow moved OpenLane-classic → **LibreLane "1-Macro-First"**.
+- Verified the area against the **live** source: digital Caravel user area = **2920×3520 µm (10.28 mm²)**
+  (not 15 mm²; 15 likely refers to the analog/Caravan variant — left open).
+- Wrote + **lint-cleaned** the CC2509 `user_project_wrapper` shim (`shims/user_project_wrapper.v`):
+  config over GPIO serial (io[8/9] in, io[10/11] status), `user_io[15:0]` on io[27:12], WB/LA tied off,
+  `chip_top` at shrunk params.
+- **PDK provenance gate (advisor):** `sram_1rw1r_32_256_8` **GDS byte-identical** across PDK versions
+  → mixing our `8afc8346`-built macros into CC2509's `3e0e31d` flow is low risk.
+- Plan recorded in `docs/issue-16/caravel-integration-plan.md` (two-harden 1-Macro-First, advisor-validated).
+
+**Next recommended action:**
+1. **Harden A — `chip_top` user macro:** multi-macro LibreLane harden placing the shrunk eFPGA macro
+   + 4 SRAM macros (explicit coords) with the soft controller/adapter/io_mux; blackbox STA; PDN over
+   all 5 → DRC/LVS/Antenna. (Advisor: light, ~tens of min.)
+2. **Harden B:** place the `chip_top` macro in `user_project_wrapper` (SYNTH_ELABORATE_ONLY) → signoff.
+3. **`make run-precheck`** (submission gate).
+4. Shrunk-fabric functional sim needs a 16-IO design + regenerated bitstream (independent of layout).
+
+---
+
 ## 2026-06-15 — Issue #16: MPW-portable chip wrapper — planning + scaffold
 
 **Branch:** `feature/16-chip-wrapper-efpga` (off `main`; do not push/merge `main`)
