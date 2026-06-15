@@ -77,6 +77,21 @@ User chose to **pursue Caravel via a shrunk fabric**. Progress (all cheap gates 
   — exactly the predicted USERIO_W=16/CONFIG_C_W=32. `chip_top` binds clean at these params
   (`rtl/efpga_top_caravel_bb.v`, iverilog exit 0).
 
+### Functional sim PASS — acceptance criterion met (validation layer 3)
+End-to-end behavioral sim, **no PDK/P&R** (`tools/run_functional_sim.sh`, baseline14):
+- Built a real bitstream (yosys→nextpnr→bit_gen) for the demo `sequential_16bit_en`.
+- FABulous oracle ran behaviorally: golden == fabric (parallel SelfWrite path).
+- **`chip_top` end-to-end (`tests/tb_chip_top_efpga.v`): PASS.** Driven only through the serial
+  `cfg_sclk`/`cfg_sdata` contract, `config_adapter` deserialized the bitstream into SelfWriteData/
+  SelfWriteStrobe, configured the **real behavioral `eFPGA_top`**, ran the counter, and matched the
+  behavioral golden exactly (`uio_out=0x63=gold`, `uio_oeb=0xffffffe=~oeb_gold`).
+- **Resolves the two pre-harden unknowns:** (1) adapter strobe cadence IS accepted by `ConfigFSM`
+  (data+strobe coincident works); (2) `uio_oeb` polarity correct (active-low; IO cell `T_top=~T`).
+- This satisfies the issue's "simple programmed-design smoke test" acceptance criterion for the
+  wrapper. The harden can proceed with confidence.
+- Note: the shrunk fabric can't run THIS demo (16 IO < demo needs); its own layer-3 check needs a
+  small fit-for-purpose user design + regenerated bitstream (flag for post-harden).
+
 ### Next recommended action
 1. **Stage 2 harden (hours, Nix devshell):** run the LibreLane GDS flow on `fabric_caravel_proj`
    (`gen_all_tile_macros` + `gen_fabric_macro`) **with the #12 `fabric_io_place` patch** at stitch;
