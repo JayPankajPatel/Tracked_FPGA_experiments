@@ -1,5 +1,61 @@
 # HANDOFF
 
+## 2026-06-15 — Issue #16: MPW-portable chip wrapper — planning + scaffold
+
+**Branch:** `feature/16-chip-wrapper-efpga` (off `main`; do not push/merge `main`)
+
+**Goal:** chip/top-level wrapper around the #12 LVS-clean `eFPGA` macro so it integrates into a
+pad-limited sky130 shuttle design. User steered the scope to: an **MPW-portable** approach (one
+fixed interface contract + fabric size as a knob), seed **Caravel + standalone** profiles, and use
+**FABulous's own simulator as the functional oracle**.
+
+**Process:** CLAUDE.md two-pass review run as two independent agents (opt + pess). Reconciled in
+`docs/issue-16/wrapper-architecture-decision.md`. Incorporated the FABulous-upstream config note
+from Dirk Koch (issue #16 comment, 2026-06-15): preserve the existing 2-cycle / address-before-frame
+frame protocol; keep the wrapper a thin adapter; no backpressure.
+
+**Key findings (primary-source):**
+- **Caravel is geometrically impossible for the current macro.** eFPGA macro = 2482.16 x 3930.40 um
+  (`final_views/lef/eFPGA.lef` SIZE); Caravel user area = 2920 x 3520 um. 3930 > 3520 (and rotated,
+  3930 > 2920) -> no orientation fits, before PDN/halo/controller. The optimistic pass's "fits" was
+  a pad-count argument (wrong axis).
+- **FABulous already generated the integration layer:** `eFPGA_top.v` wraps `eFPGA`, ties 448 BRAM
+  ports to 7 internal `BlockRAM_1KB` (which blackbox OpenRAM `sram_1rw1r_32_256_8` -> 7 hard SRAM
+  macros, NOT soft logic), drives the 712-bit config net from its own controller, and exposes a
+  small interface (CLK/resetn/SelfWrite*/UART Rx/serial s_clk,s_data + 28 bidir user IO + 168
+  config_C monitors).
+- **FABulous-sim oracle exists on disk:** `fabric_baseline_proj/Test/` (`make sim`/`FAB_sim`):
+  yosys -> nextpnr -> bit_gen -> iverilog TB; `user_design/top_wrapper.v` exposes io_in/io_out/io_oeb.
+- **open_eFPGA prior art is a 12-row fabric** (ours is 14) -> mapping pattern only, do NOT port its loader.
+- **Reproducibility gap:** all macro/controller artifacts are gitignored under `FABulous_work/`;
+  committed deliverable must stay clean-room + ship a regeneration script.
+
+### Changes made (this branch)
+- `docs/issue-16/`: `port-inventory.md`, `wrapper-architecture-decision.md` (two-pass reconciliation),
+  `mpw-validation-plan.md` (layered validation pyramid + decisions).
+- `Librelane_work/chip_wrapper/`: parametrized RTL (`chip_top.v`, `config_adapter.v`, `io_mux.v`,
+  clean-room `efpga_top_bb.v` stub), `profiles/{caravel,standalone}.yml`, `fabrics/baseline14.yml`,
+  `tools/check_conformance.py` (validation layer 2), `shims/chip_top_standalone.v`, `README.md`.
+
+### Validation run (no PDK / no P&R)
+- `iverilog -g2012 -Wall` elaboration of chip_top + standalone shim: **exit 0**.
+- `verilator --lint-only` (blackbox warnings suppressed): **exit 0**.
+- `python3 tools/check_conformance.py --all`: **standalone CONFORMANT; Caravel NOT CONFORMANT**
+  (area fail) — the checker mechanically reproduces the two-pass area finding.
+- Not run: functional/shim-replay sim against the FABulous oracle (needs regenerated `eFPGA_top` +
+  real bitstream); reference hardening (later milestone).
+
+### Next recommended action
+1. **User:** review `feature/16-chip-wrapper-efpga` direction (MPW-portable + standalone-first).
+   Decide the remaining fork: standalone-now vs also shrink-fabric-for-Caravel as a follow-up.
+2. Next increment: drive `fabric_baseline_proj/Test/` to emit a golden bitstream + reference
+   `io_out`; wire the functional + shim-replay testbench (validation layers 3-4) against `chip_top`.
+3. Write the clean-room regeneration script (pinned FABulous v2.0.0b5 + LibreLane) so the wrapper's
+   gitignored dependencies are reproducible.
+4. Later: reference hardening (LibreLane P&R + DRC/LVS/Antenna) for the standalone target.
+
+---
+
 ## 2026-06-14 — Issue #12: fabric-stitch LVS blocker RESOLVED (manufacturability-clean fabric)
 
 **Branch:** `feature/12-fabric-lvs-rootcause` (off `feature/10-fabric-baseline`; do not push/merge `main`)
