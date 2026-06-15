@@ -1,0 +1,32 @@
+# MPW target profile: standalone sky130 chip (own pad ring, dedicated slot).
+# Used by tools/check_conformance.py (validation layer 2).
+name: standalone
+description: Standalone sky130 chip sized to the existing #12-clean eFPGA macro.
+
+# We size the die ourselves; budget the macro + halo/PDN/routing + pad ring.
+# Macro is 2482.16 x 3930.40 um (final_views/lef/eFPGA.lef SIZE). Allow a
+# generous core margin around it for PDN halo + channels + pad ring.
+user_area_um:
+  width:  3200.0      # 2482 macro + ~360 um/side margin
+  height: 4500.0      # 3930 macro + ~285 um/side margin + pad ring
+
+budget:
+  gpio:            64     # we choose the pad ring; plenty for this design
+  logic_analyzer:  0
+  wishbone:        false
+  user_irq:        0
+
+contract_map:
+  clk:        pad_clk
+  rst_n:      pad_rst_n
+  cfg_sclk:   pad_cfg_sclk
+  cfg_sdata:  pad_cfg_sdata
+  cfg_busy:   pad_cfg_busy
+  cfg_done:   pad_cfg_done
+  user_io:    pad_uio[27:0]
+  power:      [vdd, vss]
+
+chip_top_params:
+  N_USER_IO:      28
+  DROP_CONFIG_C:  1
+  DBG_CONFIG_C_W: 0

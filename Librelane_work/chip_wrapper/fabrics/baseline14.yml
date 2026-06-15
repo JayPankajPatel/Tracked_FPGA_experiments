@@ -1,0 +1,25 @@
+# Fabric size descriptor — baseline FABulous v2.0.0b5 demo fabric (14 rows).
+# Clean-room datum (measured numbers + provenance, NOT the gitignored artifact).
+name: baseline14
+description: Standard FABulous demo fabric, sky130A, #12 LVS/DRC/Antenna-clean.
+
+# Hardened eFPGA macro footprint.
+# Source: FABulous_work/.../Fabric/macro/final_views/lef/eFPGA.lef  ->  SIZE 2482.160 BY 3930.400 ;
+macro_um:
+  width:  2482.16
+  height: 3930.40
+
+# chip_top size knobs for this fabric.
+params:
+  NumberOfRows:    14
+  NumberOfCols:    10
+  FrameBitsPerRow: 32
+  MaxFramesPerCol: 20
+  USERIO_W:        28
+  CONFIG_C_W:      56     # = NumberOfRows*4
+
+# Estimated soft overhead placed in the wrapper alongside the macro:
+#   config controller (Frame_Data_Reg x28, Frame_Select x20, FSM) + 7 OpenRAM
+#   BlockRAM_1KB macros + PDN halo + routing channels. Rough area uplift used
+#   only for the area-fit sanity check (not a P&R result).
+overhead_factor: 1.15

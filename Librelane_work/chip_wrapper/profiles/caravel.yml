@@ -1,0 +1,34 @@
+# MPW target profile: eFabless Caravel user_project_wrapper (sky130).
+# Used by tools/check_conformance.py (validation layer 2).
+name: caravel
+description: eFabless Caravel / ChipIgnite user_project_wrapper harness.
+
+# Fixed user-area geometry of the Caravel user_project_wrapper (microns).
+# Source: open_eFPGA/def/user_project_wrapper.def DIEAREA (2920 x 3520 um).
+user_area_um:
+  width:  2920.0
+  height: 3520.0
+
+# Pin/bus budget available to the user project.
+budget:
+  gpio:            38     # io_in/io_out/io_oeb [37:0]
+  logic_analyzer:  128    # la_data_in/out [127:0]
+  wishbone:        true   # wbs_* present
+  user_irq:        3
+
+# Contract -> harness mapping the shim must satisfy (signal: harness pin/bus).
+contract_map:
+  clk:        wb_clk_i        # or user_clock2
+  rst_n:      "~wb_rst_i"
+  cfg_sclk:   io_in[3]
+  cfg_sdata:  io_in[4]
+  cfg_busy:   io_out[5]
+  cfg_done:   io_out[6]
+  user_io:    io_in/io_out/io_oeb[37:7]   # 31 bidir available after config pins
+  power:      [vccd1, vssd1]
+
+# Knobs the conformance check feeds into chip_top for this profile.
+chip_top_params:
+  N_USER_IO:      28        # demo fabric exposes 28; fits 31-pin window
+  DROP_CONFIG_C:  1
+  DBG_CONFIG_C_W: 0
