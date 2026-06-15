@@ -29,6 +29,6 @@ contract_map:
 
 # Knobs the conformance check feeds into chip_top for this profile.
 chip_top_params:
-  N_USER_IO:      28        # demo fabric exposes 28; fits 31-pin window
+  N_USER_IO_MAX:  31        # demo fabric exposes 28; fits 31-pin window
   DROP_CONFIG_C:  1
   DBG_CONFIG_C_W: 0
