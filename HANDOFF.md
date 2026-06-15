@@ -42,8 +42,22 @@ frame protocol; keep the wrapper a thin adapter; no backpressure.
 - `verilator --lint-only` (blackbox warnings suppressed): **exit 0**.
 - `python3 tools/check_conformance.py --all`: **standalone CONFORMANT; Caravel NOT CONFORMANT**
   (area fail) — the checker mechanically reproduces the two-pass area finding.
-- Not run: functional/shim-replay sim against the FABulous oracle (needs regenerated `eFPGA_top` +
-  real bitstream); reference hardening (later milestone).
+- **Binding guard:** `efpga_top_bb.v` stub params+ports diffed **identical** to the real generated
+  `eFPGA_top.v` header (so the wrapper binds the real module, not a convenient stub).
+- **Honest scope:** only layer-2 *fit* is proven. No function proven yet; standalone-fit is by
+  construction (chosen die + 1.15 overhead heuristic, not P&R). T_top/oeb polarity and adapter
+  strobe cadence are unverified pending layer-3 sim.
+
+### Post-advisor corrections (same session)
+- Adapter rewritten: the FABulous oracle loads the bitstream via **parallel SelfWriteData[31:0]/
+  SelfWriteStrobe** (verified in `Test/sequential_16bit_en_tb.v`), NOT serial s_clk/s_data. The
+  adapter now deserializes the compact serial contract input into that path.
+- Stub corrected to mirror the real `eFPGA_top` (no synthetic CONFIG_C_W/USERIO_W params; fixed
+  [55:0]/[27:0] widths); chip_top no longer overrides nonexistent params. "Size as a knob" =
+  regenerate eFPGA_top, documented in RTL.
+
+### Not run: functional/shim-replay sim against the FABulous oracle (needs regenerated `eFPGA_top` +
+real bitstream); reference hardening (later milestone).
 
 ### Next recommended action
 1. **User:** review `feature/16-chip-wrapper-efpga` direction (MPW-portable + standalone-first).

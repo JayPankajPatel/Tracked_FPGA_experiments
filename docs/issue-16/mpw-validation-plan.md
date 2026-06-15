@@ -21,9 +21,12 @@ cfg_busy / cfg_done            //   (2-cycle, address-before-frame protocol; Dir
 user_io[N-1:0] (in/out/oe)     // N bidirectional user pins behind a mux (N per profile)
 vdd, vss                       // power
 ```
-Internally the adapter feeds `eFPGA_top`'s existing `s_clk`/`s_data` (or `SelfWriteData[31:0]`/
-`SelfWriteStrobe`). The contract never changes; the fabric size (and thus FrameData/FrameStrobe
-widths, BRAM count) is a parameter.
+Internally the adapter deserializes the compact serial input into `eFPGA_top`'s
+`SelfWriteData[31:0]`/`SelfWriteStrobe` parallel front-end — **the path the FABulous oracle TB
+actually drives** (verified: `Test/sequential_16bit_en_tb.v` loads the bitstream as 32-bit words
+on `SelfWriteData`+`SelfWriteStrobe`, two-cycle cadence; `s_clk`/`s_data` are left idle). The
+contract never changes; the fabric size (and thus FrameData/FrameStrobe widths, BRAM count, and
+the *hardcoded* `eFPGA_top` port widths) is regenerated, not parameter-overridden.
 
 ## The FABulous-sim oracle (already on disk)
 `fabric_baseline_proj/Test/Makefile` provides the full reference flow:
@@ -61,6 +64,19 @@ and a *new* profile passes conformance with **no RTL change**.
 All macro/controller artifacts are gitignored under `FABulous_work/`. The committed deliverable
 must be clean-room: wrapper RTL + profiles + checks + a **regeneration script** (pinned FABulous
 v2.0.0b5 + LibreLane) that recreates the macro + `eFPGA_top` + bitstream from a fresh checkout.
+
+## Honest status (what is and isn't proven so far)
+Only **layer 2 (static fit)** has run. That is real and useful — the Caravel FAIL is an external
+geometric constraint, not a tuning artifact. But:
+- **No function is proven yet.** Layers 3–4 (config-load + behavior vs the oracle) have not run.
+  RTL elaboration/lint passing means well-formed + correctly bound, not functionally correct.
+- **"standalone CONFORMANT" is partly by construction:** the standalone user-area (3200×4500 µm)
+  and the `1.15` overhead factor are chosen estimates, not a P&R result. It proves the macro *can*
+  be given a die that fits, not that a hardened standalone closes.
+- **Unverified polarity:** the IO cell does `T_top = ~T`; the active sense of the pad output-enable
+  (`uio_oeb`) in the standalone shim is assumed active-low and must be confirmed in layer-3 sim.
+- **Adapter cadence unconfirmed:** the serial→SelfWrite strobe timing must be checked bit-accurate
+  against the oracle controller before claiming a correct config load.
 
 ## Sequencing (this issue)
 1. Contract + parametrized wrapper RTL (`eFPGA_top` black-boxed) — lint/elaborate. ← scaffolding
