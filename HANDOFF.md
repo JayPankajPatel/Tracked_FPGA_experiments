@@ -59,14 +59,34 @@ frame protocol; keep the wrapper a thin adapter; no backpressure.
 ### Not run: functional/shim-replay sim against the FABulous oracle (needs regenerated `eFPGA_top` +
 real bitstream); reference hardening (later milestone).
 
+### Caravel-via-shrunk-fabric (user decision, later same session)
+User chose to **pursue Caravel via a shrunk fabric**. Progress (all cheap gates GREEN before harden):
+- **Area model:** `tools/estimate_area.py` (tile abutment from measured tile LEF sizes: ~246 µm/col,
+  245.48 µm/row pitch). Baseline = 10 cols × 16 tile-rows.
+- **Shrunk geometry chosen:** 8 cols × 8 functional rows, DSP kept (`fabric/caravel_shrunk.fabric.csv`).
+  Predicted macro 1987×2455 µm (4.88 mm²).
+- **SRAM-inclusive Caravel budget (advisor gate):** ~6.15 mm² need (4.88 fabric + 4×0.168 SRAM +
+  ~0.6 controller) vs ~8.74 mm² usable core (15% PDN) → **FITS, 2.6 mm² margin**. SRAM macro
+  376.48×446.235 µm; `sram_1rw1r_32_256_8_sky130` from ciel sky130A.
+- **Conformance:** `caravel × caravel_shrunk` → **CONFORMANT**; `caravel × baseline14` still NOT
+  (area). Exposed user IO modeled as min(harness window, fabric USERIO_W).
+- **Adapter unit sim PASS:** `tests/tb_config_adapter.v` (iverilog) — serial→SelfWriteData/Strobe
+  deserialization correct (advisor gate #1a).
+- **Fabric-gen smoke PASS:** regenerated the shrunk fabric RTL (`regen_caravel_fabric.sh` stage 1);
+  generated `eFPGA_top` confirms **NumberOfRows=8/Cols=8, config_C[31:0], I/O/T_top[15:0], 4×BlockRAM**
+  — exactly the predicted USERIO_W=16/CONFIG_C_W=32. `chip_top` binds clean at these params
+  (`rtl/efpga_top_caravel_bb.v`, iverilog exit 0).
+
 ### Next recommended action
-1. **User:** review `feature/16-chip-wrapper-efpga` direction (MPW-portable + standalone-first).
-   Decide the remaining fork: standalone-now vs also shrink-fabric-for-Caravel as a follow-up.
-2. Next increment: drive `fabric_baseline_proj/Test/` to emit a golden bitstream + reference
-   `io_out`; wire the functional + shim-replay testbench (validation layers 3-4) against `chip_top`.
-3. Write the clean-room regeneration script (pinned FABulous v2.0.0b5 + LibreLane) so the wrapper's
-   gitignored dependencies are reproducible.
-4. Later: reference hardening (LibreLane P&R + DRC/LVS/Antenna) for the standalone target.
+1. **Stage 2 harden (hours, Nix devshell):** run the LibreLane GDS flow on `fabric_caravel_proj`
+   (`gen_all_tile_macros` + `gen_fabric_macro`) **with the #12 `fabric_io_place` patch** at stitch;
+   capture the new macro LEF SIZE; re-diff `efpga_top_caravel_bb.v`. Then wrap in Caravel
+   `user_project_wrapper` (Caravel shim: contract → io_in/io_out/io_oeb + Wishbone) and run
+   chip-level DRC/LVS/Antenna.
+2. **Functional layer 3-4:** drive `Test/` (now also for the shrunk fabric) to emit a golden
+   bitstream + reference `io_out`; wire the end-to-end + shim-replay TB against `chip_top` (confirms
+   adapter cadence vs the real controller, and T_top/oeb polarity).
+3. Keep standalone (baseline14) as the large-fabric reference target in parallel.
 
 ---
 
