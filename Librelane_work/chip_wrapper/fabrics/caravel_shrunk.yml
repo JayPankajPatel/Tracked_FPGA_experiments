@@ -1,0 +1,28 @@
+# Fabric size descriptor — SHRUNK fabric targeted to fit Caravel (issue #16).
+# Candidate geometry chosen to fit the Caravel user area (2920x3520 um) with
+# generous margin for the soft config controller + 7 OpenRAM BRAM macros + PDN.
+# macro_um is PREDICTED by tools/estimate_area.py (not yet hardened).
+name: caravel_shrunk
+description: Shrunk FABulous fabric (8 cols x 8 functional rows, DSP kept) for Caravel.
+
+# Tile grid (drives the regenerated fabric.csv and the area prediction).
+grid:
+  # one entry per column, north->south terminators added automatically.
+  columns: [W_IO, LUT4AB, LUT4AB, RegFile, LUT4AB, DSP, LUT4AB, RAM_IO]
+  functional_rows: 8     # even, so the DSP supertile (2 rows) pairs cleanly
+
+# Predicted macro footprint (from estimate_area.py); replace with measured LEF
+# SIZE after the regenerate+harden.
+macro_um:
+  width:  1986.0
+  height: 2454.8
+
+params:
+  NumberOfRows:    8
+  NumberOfCols:    8
+  FrameBitsPerRow: 32
+  MaxFramesPerCol: 20
+  USERIO_W:        16     # ~2 user-IO triples per IO row (regenerate to confirm)
+  CONFIG_C_W:      32     # = NumberOfRows*4
+
+overhead_factor: 1.25     # soft controller + 7 SRAM macros + PDN halo (estimate)

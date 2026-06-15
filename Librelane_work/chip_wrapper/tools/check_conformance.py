@@ -57,15 +57,21 @@ def check(profile, fabric):
                         str(cmap.get(sig)) if ok else "MISSING"))
 
     # --- 2. pin budget ---
-    n_user = int(profile.get("chip_top_params", {}).get("N_USER_IO", 0))
-    dbg = int(profile.get("chip_top_params", {}).get("DBG_CONFIG_C_W", 0))
+    # Profile declares the harness user-IO window it can offer; the fabric
+    # declares how many user-IO triples it actually has. Exposed = min of both.
+    ctp = profile.get("chip_top_params", {})
+    want_user = int(ctp.get("N_USER_IO_MAX", ctp.get("N_USER_IO", 0)))
+    fab_userio = int(fabric.get("params", {}).get("USERIO_W", want_user))
+    n_user = min(want_user, fab_userio)
+    dbg = int(ctp.get("DBG_CONFIG_C_W", 0))
     need_pins = len(SCALAR_PINS) + n_user + dbg
     budget = profile.get("budget", {})
     avail = int(budget.get("gpio", 0)) + int(budget.get("logic_analyzer", 0))
-    ok = need_pins <= avail
+    ok = need_pins <= avail and n_user > 0
     results.append((ok, "pin budget",
                     f"need {need_pins} (= {len(SCALAR_PINS)} cfg/clk/rst + "
-                    f"{n_user} user + {dbg} dbg), have {avail}"))
+                    f"{n_user} user [min(want {want_user}, fabric {fab_userio})] "
+                    f"+ {dbg} dbg), have {avail}"))
 
     # --- 3. area fit (the Caravel-catching check) ---
     m = fabric["macro_um"]

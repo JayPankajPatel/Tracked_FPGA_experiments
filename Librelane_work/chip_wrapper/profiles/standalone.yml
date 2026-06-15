@@ -27,6 +27,6 @@ contract_map:
   power:      [vdd, vss]
 
 chip_top_params:
-  N_USER_IO:      28
+  N_USER_IO_MAX:  28
   DROP_CONFIG_C:  1
   DBG_CONFIG_C_W: 0
