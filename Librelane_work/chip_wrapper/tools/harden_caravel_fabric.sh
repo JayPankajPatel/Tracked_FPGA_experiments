@@ -18,8 +18,22 @@ FV=$WS/fabulous-v2
 PROJ=fabric_caravel_proj
 LOG=$WS/harden-caravel-shrunk.log
 INNER=$WS/harden-caravel-inner.sh
+RAMLOG=$WS/harden-ram.log
 
 echo "=== HARDEN START $(date -Is) ===" | tee "$LOG"
+
+# RAM monitor: every 20 s log total usage + the top-5 RSS processes, so we can
+# see what dominates (gen_fabric_macro/OpenROAD/Magic) and tune it later.
+: > "$RAMLOG"
+( while true; do
+    echo "--- $(date -Is) ---" >> "$RAMLOG"
+    free -m | awk 'NR<=2' >> "$RAMLOG"
+    ps -eo rss,comm,args --sort=-rss 2>/dev/null | head -6 \
+      | awk '{printf "%8.1f MB  %s\n", $1/1024, substr($0, index($0,$2))}' >> "$RAMLOG"
+    sleep 20
+  done ) &
+RAMMON=$!
+trap 'kill $RAMMON 2>/dev/null' EXIT
 
 # 1. Apply the #12 IO-placement fix to the FABulous checkout (idempotent).
 bash "$REPO/docs/issue-12/apply-fix.sh" "$FV" 2>&1 | tee -a "$LOG"
@@ -40,7 +54,9 @@ echo "--- inner done \$(date -Is) ---"
 INNEREOF
 chmod +x "$INNER"
 
-# 3. Run inside the devshell.
+# 3. Run inside the devshell. MUST cd into $FV first: the flake shellHook derives
+#    the repo root (-> PYTHONPATH for the editable `fabulous` pkg) from $PWD.
+cd "$FV"
 nix develop "$FV" --command bash "$INNER" 2>&1 | tee -a "$LOG"
 RC=${PIPESTATUS[0]}
 
