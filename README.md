@@ -36,10 +36,16 @@ live session log.
 ```bash
 export PATH=$HOME/.fabulous/oss-cad-suite/bin:$PATH
 cd Librelane_work/chip_wrapper
-# RTL elaboration + static MPW conformance
-iverilog -g2012 -Wall -o /tmp/x rtl/*.v shims/chip_top_standalone.v
+# RTL elaboration — pick ONE eFPGA_top stub; the two rtl/efpga_top*_bb.v files are
+# per-target alternatives (baseline14 vs shrunk Caravel) and cannot be compiled together
+iverilog -g2012 -Wall -o /tmp/x rtl/chip_top.v rtl/config_adapter.v rtl/io_mux.v \
+    rtl/efpga_top_bb.v shims/chip_top_standalone.v
+# static MPW conformance; --all sweeps profiles x baseline14, where caravel is
+# EXPECTEDLY NOT CONFORMANT (area) -> exit 1. The actual Caravel target is the
+# shrunk 8x8 fabric, which must be CONFORMANT -> exit 0:
 python3 tools/check_conformance.py --all
-# end-to-end functional sim against the FABulous oracle
+python3 tools/check_conformance.py --profile profiles/caravel.yml --fabric fabrics/caravel_shrunk.yml
+# end-to-end functional sim against the FABulous oracle (builds a real bitstream)
 bash tools/run_functional_sim.sh
 ```
 
