@@ -1,5 +1,64 @@
 # HANDOFF
 
+## 2026-07-10 — Issue #16: V1–V3 shrunk-fabric validation gate GREEN; repo audit; README repro fix
+
+**Branches:** `feature/16-shrunk-fabric-validation` (main work), `update/readme-repro-fix`
+(docs fix). Both local-only pending user approval to push/PR.
+
+**Session shape:** user asked for an internal audit of all GH issues vs their goals, then
+"do your recommended actions". Audit verdicts: #1/#2/#7/#10/#12 all genuinely hit their
+acceptance criteria (evidence reproduced live); #16 on track and correctly open. Cross-cutting
+findings: broken README repro command (fixed this session), 3 dispatch-only CI jobs never
+dispatched (falsifier #7-#3 still open), wiki toolchain/ + handoffs/ promotions pending,
+`.lib`/timing follow-up issue never filed (drafted this session), stochastic-block work
+untracked (drafted v0 issue). User clarification recorded: **#16 is provider-generic**
+(make the macro manufacturable behind one contract; Caravel is the first profile, not the
+goal); the standalone-padframe track (sky130 IO cells) is real future scope with no issue yet.
+
+**Main result — issue #16's mandatory pre-harden gate is MET (docs/issue-16/shrunk-validation.md):**
+- **V1:** lfsr8 + shiftreg8 (user's local designs, now committed under
+  `Librelane_work/chip_wrapper/user_design_shrunk/`) build real bitstreams for the shrunk 8×8
+  fabric (yosys→nextpnr→bit_gen), **bit-identical** to the user's pre-existing local artifacts.
+  lfsr8: 11/256 LCs, Fmax 80 MHz; shiftreg8: 8/256 LCs, Fmax 122 MHz; both 16/16 IO.
+- **V2a/V2b:** behavioral end-to-end PASS ×2 designs via the FABulous oracle (parallel
+  SelfWrite) AND via `chip_top`'s serial contract at shrunk params (new TBs
+  `tests/tb_shrunk_oracle.v`, `tests/tb_chip_top_shrunk.v`).
+- **V3:** gate-level (post-layout `eFPGA.nl.v` + tile `.nl.v` + sky130 functional models)
+  **PASS 200/200 for shiftreg8 under Verilator 2-state** (zero-delay AND #1 — identical).
+  **Harden A/B unblocked.**
+- Runner: `tools/run_shrunk_validation.sh` (V1→V3, clean-room, graded summary, exit code).
+
+**Debugging yield (promoted to auto-memory `gate-sim-fabulous-needs-2state`):**
+1. **TB posedge-write race** (mine, fixed): driving DUT inputs in the sampling-posedge timestep
+   → golden vs gate netlist legally sample opposite sides; symptom was a single wrong bit
+   walking down the shift chain (8 transient mismatches). All TB stimulus is now negedge-driven.
+2. **icarus 4-state X on this netlist family re-confirmed + extended**: '1's correct / '0's
+   read X (OR-branch X leak); falsified fixes recorded (`UNIT_DELAY`, storage-init shim
+   `tests/sky130_sim_prims_init0.v` — kept as investigation artifact).
+3. **lfsr8 gate sim DIDNOTCONVERGE (informational)**: the switch matrices form 36 structural
+   comb cycles (`UNOPTFLAT`); lfsr8's config activates one (oscillates 2-state / parks at X
+   4-state). Follow-up: check whether its FASM truly routes a closed loop (power concern /
+   upstream-relevant).
+
+**Also this session:** README repro block fixed + chip_wrapper README synced (the old
+`iverilog rtl/*.v` command never worked — both eFPGA_top stubs globbed → duplicate module);
+all repro commands now verified as written. Two issue drafts ready in scratchpad (macro
+`.lib`/timing follow-up; stochastic-block v0). CI dispatch command prepared for
+`gds-bootstrap-synth-check` — note a single `workflow_dispatch` fires ALL THREE dispatch-only
+jobs (t2 hardening 360-min, bootstrap-synth-check, fabric-stitch).
+
+**Open questions:**
+1. lfsr8 routing-loop follow-up (above).
+2. Standalone-padframe (provider-generic manufacturability) issue — user to decide scope.
+3. Wiki promotions still pending: #7 toolchain lessons → `toolchain/`, #10 baseline → `experiments/`.
+
+**Next recommended action:**
+1. User approvals: push+PR both branches; post the two drafted issues; optionally dispatch CI.
+2. Then Harden A (`chip_top` user macro, multi-macro LibreLane) → Harden B
+   (`user_project_wrapper`) → `make run-precheck` per `docs/issue-16/caravel-integration-plan.md`.
+
+---
+
 ## 2026-06-15 — Issue #16: Caravel CC2509 integration (modern harness) — in progress
 
 **Branch:** `feature/16-chip-wrapper-efpga`. **PR opened** linking #16.
