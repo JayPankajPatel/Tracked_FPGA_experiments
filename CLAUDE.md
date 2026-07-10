@@ -1,23 +1,23 @@
-# Hardened Stochastic Computing Blocks for FPGA Fabric
+# Platform for Experimenting with Novel FPGA Architectures
 
 ## Goal
 
-This project designs and evaluates silicon-hardened stochastic computing blocks for integration into a custom FPGA fabric.
+This project builds a reproducible platform for experimenting with novel FPGA architectures — a pipeline from fabric definition through simulation, bitstream/behavioral/gate-level validation, MPW-portable chip integration, and manufacturability signoff — and uses it to design and evaluate candidate architectures with measured evidence (area, timing, function) instead of committing to them blindly.
 
-The objective is to create hardened blocks that can be embedded into the fabric to accelerate workloads where stochastic computing may offer advantages in power, area, or throughput.
+The first architecture payload is silicon-hardened stochastic computing blocks embedded in the fabric, to accelerate workloads where stochastic computing may offer advantages in power, area, or throughput. The platform itself is a primary product of the project, not scaffolding for a one-off experiment.
 
 The target process is the open-source SkyWater 130nm PDK.
 
-Primary target workloads include:
+Primary target workloads for the stochastic payload include:
 
 - Stochastic modeling
 - Image processing
 - AI inference
 - Other FPGA-suitable workloads where stochastic computing may be competitive
 
-The current priority is experimentation and simulation before committing to a specific hardened block architecture or fabric integration strategy.
+The current priority is experimentation and simulation before committing to any specific architecture — a hardened block design, a fabric organization, or an integration strategy alike.
 
-The long-term goal is to move from simulation and RTL prototypes toward FABulous/OpenFPGA fabric integration, LibreLane/OpenLane physical implementation, and eventual tapeout of the custom FPGA fabric containing these hardened blocks.
+The long-term goal is to move from simulation and RTL prototypes toward FABulous/OpenFPGA fabric integration, LibreLane/OpenLane physical implementation, and eventual tapeout of custom FPGA fabrics carrying novel hardened blocks — with the stochastic-computing fabric as the first such tapeout.
 
 ## Tools
 

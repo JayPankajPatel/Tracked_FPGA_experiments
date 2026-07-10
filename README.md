@@ -1,10 +1,12 @@
 # Tracked_FPGA_experiments
 
-Silicon-hardened **stochastic-computing blocks for a custom FPGA fabric** on the open-source
-SkyWater 130nm PDK. The work moves from RTL prototypes and simulation toward
-FABulous/OpenFPGA fabric integration, LibreLane/OpenLane physical implementation, and eventual
-tapeout. See `CLAUDE.md` for the full charter and working conventions, and `HANDOFF.md` for the
-live session log.
+A reproducible **platform for experimenting with novel FPGA architectures** on the open-source
+SkyWater 130nm PDK: fabric definition → generation → bitstream/behavioral/gate-level validation →
+MPW-portable chip integration → manufacturability signoff. First architecture payload:
+silicon-hardened **stochastic-computing blocks**. The work moves from RTL prototypes and
+simulation toward FABulous/OpenFPGA fabric integration, LibreLane/OpenLane physical
+implementation, and eventual tapeout. See `CLAUDE.md` for the full charter and working
+conventions, and `HANDOFF.md` for the live session log.
 
 ## Repository layout
 
