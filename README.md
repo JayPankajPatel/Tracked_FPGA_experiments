@@ -49,3 +49,16 @@ bash tools/run_functional_sim.sh
 
 Work is tracked via GitHub Issues/PRs (every task → issue → branch → PR). Durable findings are
 promoted to `~/wiki/fpga_stochastic_blocks/`.
+
+## License
+
+Licensed under the **Apache License, Version 2.0** — see [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
+Apache-2.0 matches this project's upstreams (FABulous, OpenLane/LibreLane, and the SkyWater 130nm
+PDK are all Apache-2.0), and its explicit patent grant is deliberate.
+
+**Hardware artifacts:** the RTL is source text and sits comfortably under Apache-2.0. Apache's
+wording strains only when *hardware artifacts themselves* — synthesized netlists and especially
+GDS layouts — are publicly distributed. If and when this repo publishes such artifacts, the
+intent is to layer a hardware-specific license (**Solderpad Hardware License 2.1**, an Apache-2.0
+wrapper, or **CERN-OHL-P**) onto those specific directories at that time. Until then a single
+root Apache-2.0 is intentional, matching SkyWater's own practice of shipping GDS under Apache-2.0.

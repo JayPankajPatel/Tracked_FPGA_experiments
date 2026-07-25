@@ -1,0 +1,10 @@
+Tracked_FPGA_experiments
+Copyright 2026 Jay Pankaj Patel
+
+This product is licensed under the Apache License, Version 2.0 (the "License");
+see the LICENSE file or http://www.apache.org/licenses/LICENSE-2.0 .
+
+This repository vendors, generates against, or targets the following upstream
+open-source projects, each under its own license (predominantly Apache-2.0):
+FABulous, OpenFPGA, OpenLane/LibreLane, and the SkyWater 130nm PDK. Their
+copyrights and licenses remain with their respective authors.
