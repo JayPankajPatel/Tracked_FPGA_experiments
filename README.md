@@ -33,7 +33,14 @@ conventions, and `HANDOFF.md` for the live session log.
   - Integration target: **ChipFoundry Caravel `user_project_wrapper` (tag CC2509)** via the
     LibreLane 1-Macro-First flow. Shim written and lint-clean; macro/wrapper hardens are next.
 
-## Reproduce the cheap checks (no PDK / no P&R)
+## Reproduce
+
+This repo is **clean-room by design**: the vendored FABulous checkout, the sky130 PDK, and all
+generated artifacts (tile macros, runs, GDS) are gitignored. What's tracked is the *recipe* —
+pinned tool versions, the fabric definition, and regeneration scripts — so the fabric can be
+rebuilt from scratch.
+
+### Tier 1 — cheap checks (no PDK / no P&R)
 
 ```bash
 export PATH=$HOME/.fabulous/oss-cad-suite/bin:$PATH
@@ -50,6 +57,25 @@ python3 tools/check_conformance.py --profile profiles/caravel.yml --fabric fabri
 # end-to-end functional sim against the FABulous oracle (builds a real bitstream)
 bash tools/run_functional_sim.sh
 ```
+
+### Tier 2 — full fabric regenerate & harden (needs pinned FABulous + sky130 PDK)
+
+The complete clean-room chain. Each step links the detailed doc:
+
+1. **Pin + clone FABulous** at `v2.0.0b5` (commit `4a2047b`) into `FABulous_work/` — see
+   [`docs/fabulous-setup-guide.md`](docs/fabulous-setup-guide.md). Never reuse a personal checkout.
+2. **Create the baseline demo fabric** (`FABulous create-project fabric_baseline_proj` — the stock
+   demo, taken as-is) — see [`docs/fabric-gds-baseline.md`](docs/fabric-gds-baseline.md).
+3. **Regenerate the shrunk 8×8 Caravel fabric RTL** — overlays the tracked fabric definition
+   (`Librelane_work/chip_wrapper/fabric/caravel_shrunk.fabric.csv`):
+   ```bash
+   bash Librelane_work/chip_wrapper/tools/regen_caravel_fabric.sh
+   ```
+4. **Harden to GDS** (hours-class, ~tens of GB RAM) — applies the issue-12 `fabric_io_place` fix
+   ([`docs/issue-12/`](docs/issue-12/)) before fabric stitch, producing the LVS/DRC/Antenna-clean macro:
+   ```bash
+   bash Librelane_work/chip_wrapper/tools/harden_caravel_fabric.sh
+   ```
 
 ## Tracking
 
