@@ -35,7 +35,7 @@ The next useful milestone is not a DSP fabric yet. First, prove the simpler hier
 
 - FABulous `v2.0.0b5` = `4a2047b...`; LibreLane `v3.0.3` (flake.lock `1e4f4d5b`); nix-eda `6.11.0`.
 - sky130A PDK pinned: `FAB_PDK_HASH=8afc8346a57fe1ab7934ba5a6056ea8b43078e71` (OpenLane-format; LibreLane-readable).
-- Work under `FABulous_work/`; do not rely on `/home/jay/Repos/FABulous`, local Nix state, local PDK state, or external personal repos.
+- Work under `FABulous_work/`; do not rely on `~/Repos/FABulous`, local Nix state, local PDK state, or external personal repos.
 
 ## Tasks
 
