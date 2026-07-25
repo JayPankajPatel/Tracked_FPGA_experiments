@@ -12,7 +12,7 @@
 set -uo pipefail
 source /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh 2>/dev/null || true
 
-REPO=/home/jay/Repos/Tracked_FPGA_experiments
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"  # repo root (tools/ is 3 levels down)
 WS=$REPO/FABulous_work
 FV=$WS/fabulous-v2
 PROJ=fabric_caravel_proj

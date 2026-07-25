@@ -27,7 +27,7 @@ The decision is fundamentally a **timeline choice**, not a quality ranking:
 
 Per the issue, recorded only as context; its dirty/Nix state must **not** define the project setup.
 
-- Path: `/home/jay/Repos/FABulous` (read-only reference only)
+- Path: `~/Repos/FABulous` (read-only reference only)
 - Detached at tag `v2.0.0b4`, HEAD `b857480`
 - Remote: `https://github.com/FPGA-Research-Manchester/FABulous` → redirects to `FPGA-Research/FABulous`
 - Dirty: 6 modified files including `flake.lock` and `docs/uv.lock` (local experiment/Nix state)

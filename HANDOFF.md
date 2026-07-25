@@ -403,8 +403,8 @@ Decision **`v2.0.0b5`**. **Issue #2** open (…/issues/2). Follow-up notes in `u
 
 ### Commands run (read-only research)
 `gh release list/view`, `gh api .../compare/...`, `gh api .../contents/.github/workflows?ref=<ref>`,
-`gh api .../contents/README.md?ref=<ref>`; `git -C /home/jay/Repos/FABulous ...` (read-only);
-read `~/wiki/fpga_tapeout/...` notes; `grep` of `/home/jay/Repos/sky130-fabulous-testchip` flake/.gitmodules (read-only).
+`gh api .../contents/README.md?ref=<ref>`; `git -C ~/Repos/FABulous ...` (read-only);
+read `~/wiki/fpga_tapeout/...` notes; `grep` of `~/Repos/sky130-fabulous-testchip` flake/.gitmodules (read-only).
 
 ### Open questions
 1. ~~Ref sign-off~~ → **RESOLVED: `v2.0.0b5`** (2026-06-08).

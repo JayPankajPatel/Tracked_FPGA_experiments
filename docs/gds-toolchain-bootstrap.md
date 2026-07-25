@@ -32,7 +32,7 @@ The official flow is `FABulous --project-dir <proj> run 'gen_all_tile_macros'`, 
 Requires **Nix with flakes** and the **FOSSi binary cache trusted at the system level** (otherwise the EDA closure source-builds for hours). On this machine that is Determinate Nix with `/etc/nix/nix.custom.conf` adding `nix-cache.fossi-foundation.org` as a trusted substituter — see [[nix-environment-state]] (wiki).
 
 ```sh
-# under FABulous_work/ (never /home/jay/Repos/FABulous)
+# under FABulous_work/ (never ~/Repos/FABulous)
 git clone https://github.com/FPGA-Research/FABulous.git fabulous-v2
 cd fabulous-v2 && git checkout 4a2047bbb1ff2a73d2bdb3e9f951d9746cfaa68a
 nix develop          # builds/fetches the devshell (FABulous + LibreLane v3.0.3 + EDA tools)
