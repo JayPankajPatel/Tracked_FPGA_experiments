@@ -1,0 +1,6 @@
+TILE,STB
+INCLUDE,./../include/Base.csv
+NORTH,Co0,0,-1,Ci0,1,CARRY="dummy"
+BEL,./FABulous_stochastic_to_binary_sync.sv
+MATRIX,GENERATE
+EndTILE
