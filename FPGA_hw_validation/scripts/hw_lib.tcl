@@ -25,3 +25,14 @@ proc vio_get {vio name} {
   refresh_hw_vio $vio
   return [get_property INPUT_VALUE [get_hw_probes $name -of_objects $vio]]
 }
+
+# Upload the ILA buffer and save it as <dir>/<name>.{ila,csv,vcd}.
+# .ila reopens in the Vivado waveform viewer, .vcd in GTKWave, .csv for checkers.
+proc ila_save {ila dir name} {
+  file mkdir $dir
+  set d [upload_hw_ila_data $ila]
+  write_hw_ila_data -force $dir/$name.ila $d
+  write_hw_ila_data -force -csv_file $dir/$name.csv $d
+  write_hw_ila_data -force -vcd_file $dir/$name.vcd $d
+  puts "ILA_SAVED $dir/$name.{ila,csv,vcd}"
+}

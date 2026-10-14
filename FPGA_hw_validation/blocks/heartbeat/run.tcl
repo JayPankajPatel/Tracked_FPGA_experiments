@@ -9,7 +9,6 @@ proc run_block {dev vio ila out_dir} {
   run_hw_ila $ila
   vio_set $vio rst_n 1          ;# release reset
   wait_on_hw_ila $ila -timeout 10
-  set d [upload_hw_ila_data $ila]
-  write_hw_ila_data -csv_file $out_dir/ila.csv -force $d
-  puts "RUN_DONE ila=$out_dir/ila.csv"
+  ila_save $ila $out_dir capture
+  puts "RUN_DONE $out_dir"
 }

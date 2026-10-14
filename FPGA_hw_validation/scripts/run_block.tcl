@@ -3,7 +3,7 @@
 # Usage: hw_session.sh run_block.tcl <block> [out_dir]
 set block   [lindex $argv 0]
 set root    [file normalize [file join [file dirname [info script]] ..]]
-set out_dir [expr {[llength $argv] > 1 ? [file normalize [lindex $argv 1]] : "$root/results/$block"}]
+set out_dir [expr {[llength $argv] > 1 ? [file normalize [lindex $argv 1]] : "$root/waveforms/$block"}]
 file mkdir $out_dir
 source $root/scripts/hw_lib.tcl
 source $root/blocks/$block/run.tcl
