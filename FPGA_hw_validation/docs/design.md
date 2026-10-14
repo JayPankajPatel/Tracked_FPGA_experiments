@@ -61,15 +61,6 @@ using the ILA to observe behavior. (Issue #27.)
 
 ## Known limits
 - RTL on 7-series only; sky130/FABulous netlists need gate-level simulation or LEC.
-- Single-clock designs only. This approach does **not** exercise clock-domain crossings (see below).
 - One configuration per block; parameter sweeps stay in simulation/formal.
 - Build utilization numbers include the ILA/VIO/ROM/debug hub and must not be used as block costs.
 - Only the replayed vectors are covered; a passing block is "matches simulation on N vectors", not "proven correct".
-
-## Clock-domain crossings (CDC)
-An FPGA run can occasionally reveal CDC bugs (missing synchronizer, un-Gray-coded bus, narrow pulse), but absence of
-failures is weak evidence: metastability is probabilistic and depends on temperature, placement and the exact clock
-relationship. The right order is (1) structural analysis with Vivado `report_cdc`, (2) formal proofs of FIFO pointer
-logic, (3) a long two-unrelated-clock hardware stress run with an error counter. The Zybo has one 125 MHz clock, so MMCM
-outputs are related; truly asynchronous clocks need the PS FCLKs or another oscillator. The only CDC-relevant block in
-Microarch_Lib is the unfinished `axis_async_fifo` stub, which was out of scope here.
