@@ -16,6 +16,7 @@ conventions, and `HANDOFF.md` for the live session log.
 | `FABulous_work/` | FABulous fabric definition/generation and local harden workspaces (gitignored generated artifacts; clean-room recipes are tracked). |
 | `Librelane_work/` | sky130 ASIC implementation: the chip-level wrapper (`chip_wrapper/`) and Caravel integration. |
 | `Stochastic_Blocks/` | RTL, testbenches, and sims for the stochastic blocks. |
+| `FPGA_hw_validation/` | On-hardware (Zybo Z7-10, VIO + ILA) validation of every stochastic block against cocotb-derived simulation; see its README. |
 | `HANDOFF.md` | Running project log — read first, update last. |
 
 ## Status (2026-06-15)
