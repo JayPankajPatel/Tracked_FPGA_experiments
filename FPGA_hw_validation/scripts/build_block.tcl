@@ -6,6 +6,7 @@ set root    [file normalize [file join [file dirname [info script]] ..]]
 set out_dir [expr {[llength $argv] > 1 ? [file normalize [lindex $argv 1]] : "$root/build/$block"}]
 set part    xc7z010clg400-1
 array set BLOCK {}
+set MICROARCH [expr {[info exists ::env(MICROARCH_LIB)] ? $::env(MICROARCH_LIB) : "$::env(HOME)/Repos/Microarch_Lib"}]
 source $root/blocks/$block/block.tcl
 
 file delete -force $out_dir
@@ -19,6 +20,7 @@ add_files -norecurse $srcs
 if {[info exists BLOCK(include_dirs)]} { set_property include_dirs $BLOCK(include_dirs) [current_fileset] }
 if {[info exists BLOCK(defines)]}      { set_property verilog_define $BLOCK(defines) [current_fileset] }
 set_property file_type SystemVerilog [get_files *.sv]
+foreach m [get_files -quiet *.mem] { set_property file_type {Memory File} $m }
 add_files -fileset constrs_1 -norecurse $root/constraints/zybo_z7_10.xdc
 set_property top $BLOCK(top) [current_fileset]
 
