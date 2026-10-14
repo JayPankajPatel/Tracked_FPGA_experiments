@@ -1,5 +1,38 @@
 # HANDOFF
 
+## 2026-10-14 — Issue #27: on-hardware validation of every stochastic block (Zybo Z7-10)
+
+**Branch:** `feature/27-zybo-hw-validation` (worktree `../Tracked_FPGA_experiments_hwval`, branched from `origin/main`;
+pushed, no PR opened yet).
+
+**Goal:** confirm each stochastic RTL block actually works on silicon, with reusable scripts, using VIO + ILA over the
+remote-JTAG tunnel (`~/Programs/AMD/remote_fpga_jtag/`).
+
+**Result:** all 18 block configurations (+ heartbeat) PASS bit-exact on a real xc7z010; every block's negative control
+fails as required. Table in `FPGA_hw_validation/README.md`; ILA captures (`.ila/.csv/.vcd`) tracked in
+`FPGA_hw_validation/waveforms/`. Multiply chain max error 0.49% FS, add chain 4.31% FS (WIDTH=8, seeds 1/204).
+
+**How:** record (cocotb/Verilator, golden models asserted) -> replay from on-chip ROM (`rtl/hwb_core.sv`) -> ILA capture ->
+`verif/compare_trace.py`. One command per block: `scripts/run_replay_block.sh <block>`; all: `scripts/run_hw_regression.sh`.
+RTL/benches are referenced from `~/Repos/Microarch_Lib` (not modified).
+
+**Commands run:** hw_check, build_block/run_block per block, run_hw_regression (several batches). One batch was interrupted
+when the board was unplugged mid-run; the affected blocks were rerun after reconnect (no result was taken from the
+interrupted run).
+
+**Not covered / open:**
+1. RTL on Xilinx 7-series only. sky130 / FABulous netlists still need gate-level simulation or an LEC pass (user plans to
+   look for an LEC tool; survey not started).
+2. One config per block (WIDTH=8). Parameter sweeps stay in simulation (Microarch_Lib `sweep_widths.sh`, formal).
+3. Seeds (1,2) at WIDTH=8 are 1 LFSR step apart -> multiplier ~ min(a,b); the chains here use (1,204).
+4. `HANDOFF.md` on `feature/22-stochastic-block-v0` has uncommitted edits; this entry is on top of `origin/main`'s version, so
+   expect a trivial merge when both land.
+5. Wiki: `~/wiki/fpga_stochastic_blocks/experiments/zybo-hw-validation-2026-10-14.md` (+ index line).
+
+**Next recommended action:** open the PR for #27 (needs the user's OK); then survey LEC tools for the sky130/FABulous netlists.
+
+---
+
 ## 2026-07-10 — Issue #16: V1–V3 shrunk-fabric validation gate GREEN; repo audit; README repro fix
 
 **Branches:** `feature/16-shrunk-fabric-validation` (main work), `update/readme-repro-fix`
