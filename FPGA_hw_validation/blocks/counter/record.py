@@ -13,13 +13,16 @@ async def record(dut):
     rec = Recorder(dut, [("rst_n", 1), ("en", 1), ("clr", 1)], [("out", width)])
     rng = random.Random(99)
     state = 0
+    await rec.preroll(rst_n=0, en=0, clr=0)
 
     async def cycle(rst_n, en, clr):
         nonlocal state
         out = await rec.step(rst_n=rst_n, en=en, clr=clr)
+        if not rst_n and not rec.SYNC:
+            state = 0  # async reset acts immediately; sync reset acts at the end of this cycle
+        assert out["out"] == state, f"golden mismatch: dut={out['out']} ref={state}"
         if not rst_n:
             state = 0
-        assert out["out"] == state, f"golden mismatch: dut={out['out']} ref={state}"
         if rst_n:
             if clr:
                 state = 0

@@ -53,7 +53,20 @@ def main(gen, cap):
                 print(f"   out got {decode(meta['out_fields'], o)} want {decode(meta['out_fields'], exp[k])}")
             bad += 1
     print(f"{meta['name']}: cycles={n} mismatches={bad} -> {'PASS' if not bad else 'FAIL'}")
-    return 0 if not bad else 1
+    stat_bad = 0
+    wins = meta["params"].get("windows")
+    if wins and not bad:
+        # Hardware trace == simulation trace bit-exactly, so these decoded values are what the
+        # chip produced. Statistical criterion: |decoded - ideal| <= tol_fs * full scale.
+        full, tol = (1 << meta["out_fields"][-1][1]) - 1, meta["params"].get("tol_fs", 0.1)
+        print("  window   a    b  decoded  ideal  err(%FS)")
+        for k, w in enumerate(wins):
+            err = abs(w["decoded"] - w["ideal"]) / full
+            stat_bad += err > tol
+            print(f"  {k:>6} {w['a']:>4} {w['b']:>4} {w['decoded']:>8} {w['ideal']:>6.1f} {100 * err:>8.2f}"
+                  f"{'  <-- over tol' if err > tol else ''}")
+        print(f"  statistical (tol {100 * tol:.0f}% FS): {'PASS' if not stat_bad else 'FAIL'}")
+    return 0 if not (bad or stat_bad) else 1
 
 
 if __name__ == "__main__":

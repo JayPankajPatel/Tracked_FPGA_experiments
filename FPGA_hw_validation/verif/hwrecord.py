@@ -17,8 +17,9 @@ from ma_clkrst import clock_step, drive, sample_pre_edge, start_clock  # noqa: F
 
 
 class Recorder:
-    def __init__(self, dut, in_fields, out_fields, outdir=None, period_ns=10):
+    def __init__(self, dut, in_fields, out_fields, outdir=None, period_ns=10, probes=None):
         self.dut = dut
+        self.probes = probes or {}  # name -> fn(dut) -> handle; sampled pre-edge, NOT recorded
         self.in_fields = in_fields  # [(name, width), ...] LSB first; [0] is rst_n
         self.out_fields = out_fields
         self.outdir = Path(outdir or os.environ.get("HWB_GEN_DIR", "gen"))
@@ -36,16 +37,26 @@ class Recorder:
             shift += width
         return word
 
+    SYNC = os.environ.get("HWB_SYNC") == "1"  # DUT uses synchronous reset (takes effect at the next edge)
+
+    async def preroll(self, n=3, **inputs):
+        """Idle reset cycles that are NOT recorded: emulate hwb_core holding the DUT in reset before `go`."""
+        for _ in range(n):
+            await drive(self.dut, **inputs)
+            await sample_pre_edge(self.dut)
+            await clock_step(self.dut)
+
     async def step(self, **inputs):
         """Apply one cycle of inputs; return the pre-edge output dict."""
         assert inputs.keys() == {n for n, _ in self.in_fields}, "need every input field"
         await drive(self.dut, **inputs)
         await sample_pre_edge(self.dut)
         out = {n: int(getattr(self.dut, n).value) for n, _ in self.out_fields}
+        extra = {k: int(f(self.dut).value) for k, f in self.probes.items()}
         self.vectors.append(self._pack(self.in_fields, inputs))
         self.expected.append(self._pack(self.out_fields, out))
         await clock_step(self.dut)
-        return out
+        return {**out, **extra}
 
     def finalize(self, name, params=None):
         d = self.outdir
@@ -78,6 +89,8 @@ class Recorder:
         )
         defs = [f"`define HWB_IN_W {in_w}", f"`define HWB_OUT_W {out_w}", f"`define HWB_DEPTH {n}"]
         for k, v in (params or {}).items():
+            if isinstance(v, (list, dict)) or k == "tol_fs":
+                continue
             defs.append(f"`define P_{k} {v}")
         (d / "hwb_params.svh").write_text("\n".join(defs) + "\n")
         return n

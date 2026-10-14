@@ -24,13 +24,16 @@ async def record(dut):
         return LFSR(fpoly=fpoly_for(width), initstate=init, conf="galois", verbose=False)
 
     ref, state = fresh_ref(), seed  # state == value DUT should show in a cycle
+    await rec.preroll(rst_n=0, en=0)
 
     async def cycle(rst_n, en):
         nonlocal ref, state
         out = await rec.step(rst_n=rst_n, en=en)
-        if not rst_n:  # async reset: shows seed immediately, ref restarts
+        if not rst_n:
+            # async reset shows the seed immediately; sync reset shows the old state this
+            # cycle and the seed from the next one. Either way the ref restarts at the seed.
+            exp = state if rec.SYNC else seed
             ref, state = fresh_ref(), seed
-            exp = seed
         else:
             exp = state
         assert out["out"] == exp, f"golden mismatch: dut=0x{out['out']:x} ref=0x{exp:x} (rst_n={rst_n} en={en})"
