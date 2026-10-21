@@ -211,7 +211,7 @@ nix develop --command bash -c '
 Functional correctness comes before any physical step (LVS/DRC prove manufacturability, not
 function). Run the block's cocotb bench in `~/Repos/Microarch_Lib`, and for a stochastic block
 optionally the on-FPGA replay check in `FPGA_hw_validation/`. Both test the RTL, not the FABulous
-wrapper, so Stage 5 still needs a fabric-level simulation.
+wrapper, so Stage 6 still needs a fabric-level simulation.
 
 ### Stage 1 — Write the BEL as one self-contained `.sv` under `Tile/<Name>/`
 
@@ -224,7 +224,11 @@ wrapper, so Stage 5 still needs a fabric-level simulation.
   together (`assign out = in;`). Without it the tile has one fewer real pin than carry-capable
   tiles like `LUT4AB`, `UserCLK` lands one pin-width out of alignment, and fabric-stitch LVS fails
   with no earlier symptom. Reference: `docs/issue-22/bts-carry-chain-fix/`.
-- FABulous limits switch-matrix generation to 8 outputs, which is why `STB` uses `WIDTH=6`.
+- The tile generator supports at most 32 input and 8 output BEL ports in total per tile (shared
+  reset/enable and `CARRY` ports don't count). This is why `STB` uses `WIDTH=6`.
+- Port declarations go one per line, and the BEL needs a `NoConfigBits` parameter (0 if it has no
+  config bits). A BEL with config bits also needs a `BelMap` attribute.
+- The docs call tile generation experimental. Read every generated file.
 - Pure `.sv` BELs need the tile-macro glob patch (tracked, idempotent):
 
   ```bash
@@ -243,8 +247,17 @@ wrapper, so Stage 5 still needs a fabric-level simulation.
 FABulous --project-dir fabric_sc_proj run "generate_custom_tile_config Tile/<Name>"
 ```
 
-Do not hand-edit the tile CSV's carry line or the switch-matrix `.csv`/`.list`. The switch matrix is
-rebuilt from the `.list` on every regeneration, so manual edits do not persist.
+This writes `Tile/<Name>/<Name>.csv`, `<Name>_generated_switch_matrix.list` (based on the `LUT4AB`
+switch matrix, so routing stays uniform) and updates `user_design/custom_prims.v` (see Stage 5).
+Don't hand-edit the tile CSV's carry line. While the CSV says `MATRIX,GENERATE`, the `.list` is
+regenerated on every `generate_custom_tile_config` and `run_FABulous_fabric`, so edits to it are
+lost, and the switch-matrix `.csv` is always rebuilt from the `.list`.
+
+To hand-tune the routing, change `MATRIX,GENERATE` to
+`MATRIX,./<Name>_generated_switch_matrix.list`. After that the list stops regenerating and is yours
+to edit. List lines are `<output>,<input>`, several lines for one output make a mux, and
+`[a|b]`, `{N}` and `INCLUDE` are shorthand. Note that if the list is edited by hand, re-running
+`generate_custom_tile_config` no longer updates it when the BELs change.
 
 Add `Tile/<Name>/gds_config.yaml` with `DIE_AREA: [0, 0, 246, 245]` (the standard single-tile
 footprint, which keeps pin alignment with the other tiles). Copy `docs/issue-22/stb-eio-fabric-integration/source/STB/gds_config.yaml` as a starting point.
@@ -280,7 +293,23 @@ Do not trust the pass/fail line alone. Check that `design__lvs_error__count`,
 and that the manufacturability report shows Antenna/LVS/DRC `Passed`. Also grep the post-PnR STA
 `checks.rpt` at the worst corner (see the max-slew gotcha below).
 
-### Stage 5 — Simulate with the new tile in the fabric
+### Stage 5 — Make yosys and nextpnr see the primitive
+
+- **nextpnr:** nothing to do by hand. The model (`bel.txt`, `pips.txt`) is written during fabric
+  generation (`gen_model`, part of `run_FABulous_fabric`), so regenerate the fabric after any tile
+  change and the new BEL appears in `.FABulous/bel.txt`.
+- **yosys:** `generate_custom_tile_config` adds a blackbox of the BEL to
+  `user_design/custom_prims.v`, with every vector unrolled to single-bit ports (`binary_in0`,
+  `binary_in1`, …) and `UserCLK` renamed `CLK`. The `Test/Makefile` passes it as
+  `-extra-plib` automatically. Run yosys by hand and you must pass it yourself:
+  `yosys -p "synth_fabulous -top <top> -json out.json -extra-plib user_design/custom_prims.v" ...`.
+- **User design:** instantiate the primitive by its module name with the unrolled port names (see
+  `fabric_sc_proj/user_design/bts_test.v`, which instantiates `FABulous_binary_stochastic_converter_sync`).
+  Without a techmap yosys treats it as a blackbox and won't optimize through it. A techmap is
+  optional and only needed for yosys to infer the BEL from plain RTL.
+- Clocked designs need `(* keep *) Global_Clock inst_clk (.CLK(clk));` in the top module.
+
+### Stage 6 — Simulate with the new tile in the fabric
 
 Do this before the multi-hour fabric harden. Map a design that exercises the tile through Flow A
 and run `Librelane_work/chip_wrapper/tools/run_shrunk_validation.sh`. The SMUL/SADD chain
@@ -288,7 +317,7 @@ testbench (`user_design_shrunk/sc_multiply_chain_fabric_tb.v`) is the closest ex
 for `PASS:`, because the sims exit 0 even on a FAIL display. Use Verilator 2-state for gate-level
 sims, since icarus X-locks on this netlist family.
 
-### Stage 6 — Harden every tile, then stitch the fabric
+### Stage 7 — Harden every tile, then stitch the fabric
 
 ```bash
 FABulous --project-dir fabric_sc_proj run "gen_fabric"
@@ -308,7 +337,7 @@ benign per-macro listing. A real failure shows as a nonzero `unmatched_net`/`unm
 
 The GDSII is under `Fabric/macro/final_views/gds/`.
 
-### Stage 7 — Record it
+### Stage 8 — Record it
 
 1. Copy the new tile's `.csv`, BEL `.sv`, `gds_config.yaml`, switch-matrix `.list` (if
    hand-authored) and the updated `fabric.csv` into `docs/issue-<n>/<name>/source/`, with a
