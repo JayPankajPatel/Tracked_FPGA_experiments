@@ -1,0 +1,23 @@
+# Standalone RTL-to-GDSII hardening of stochastic_adder in isolation.
+# Has its own internal galois_lfsr instance (the select RNG, see
+# Microarch_Lib docs/adr/0014) plus a MUX -- pure combinational join logic
+# around one sequential submodule. Default SELECT_LFSR_WIDTH=4.
+
+DESIGN_NAME: stochastic_adder
+VERILOG_FILES:
+  - dir::../../rtl/common/ma_assert.svh
+  - dir::../../rtl/galois_lfsr.sv
+  - dir::../../rtl/stochastic_adder.sv
+VERILOG_INCLUDE_DIRS:
+  - dir::../../rtl/common
+CLOCK_PORT: clk
+CLOCK_PERIOD: 10
+
+# Lessons applied proactively (see ~/wiki/fpga_stochastic_blocks/
+# reusable_lessons/max-fanout-constraint-vs-max-slew-at-worst-corner.md):
+# default MAX_FANOUT_CONSTRAINT=10 doesn't guarantee max slew at the worst
+# corner for an async-reset fanout net.
+MAX_FANOUT_CONSTRAINT: 4
+
+FP_SIZING: absolute
+DIE_AREA: [0, 0, 200, 200]

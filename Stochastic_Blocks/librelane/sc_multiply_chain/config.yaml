@@ -1,0 +1,43 @@
+# Standalone RTL-to-GDSII hardening of the full multiply chain:
+# 2x binary_stochastic_converter (encoders) -> stochastic_multiplier ->
+# stochastic_to_binary (decoder). This is the actual physical-layout
+# equivalent of Microarch_Lib's test_b_mult_s_integration/top.sv, which is
+# already fully verified in cocotb simulation (structural correctness:
+# mutual-startup deadlock fixed per docs/adr/0016, boundary-pulse
+# synchronization per docs/adr/0017). Promoted here (renamed from `top` to
+# `sc_multiply_chain_top` for a non-generic DESIGN_NAME) as a real,
+# multi-instance integration hardening target -- not just individual
+# blocks in isolation.
+#
+# Default WIDTH=4 -- same known synthesizability-vs-numeric-accuracy split
+# as every other block hardened so far (docs/adr/0019): WIDTH=4 is
+# structurally incapable of accurate stochastic multiplication via any
+# seed choice, but that doesn't affect whether this composition hardens
+# correctly as real silicon.
+
+DESIGN_NAME: sc_multiply_chain_top
+VERILOG_FILES:
+  - dir::../../rtl/common/ma_assert.svh
+  - dir::../../rtl/counter.sv
+  - dir::../../rtl/galois_lfsr.sv
+  - dir::../../rtl/binary_stochastic_converter.sv
+  - dir::../../rtl/stochastic_binary_converter.sv
+  - dir::../../rtl/stochastic_multipler.sv
+  - dir::../../rtl/integration/sc_multiply_chain_top.sv
+VERILOG_INCLUDE_DIRS:
+  - dir::../../rtl/common
+CLOCK_PORT: clk
+CLOCK_PERIOD: 10
+
+# Fanout/slew fix applied proactively (see ~/wiki/fpga_stochastic_blocks/
+# reusable_lessons/max-fanout-constraint-vs-max-slew-at-worst-corner.md) --
+# this composition has THREE separate async resets (2 encoders + decoder,
+# though all driven from the same rst_n port) fanning out across more
+# total flops than any single block hardened so far, so it's at least as
+# exposed to the same failure mode.
+MAX_FANOUT_CONSTRAINT: 4
+
+# Larger die than any single block (more instances, more real logic) --
+# start at 300x300 given binary_stochastic_converter alone needed 200x200.
+FP_SIZING: absolute
+DIE_AREA: [0, 0, 300, 300]

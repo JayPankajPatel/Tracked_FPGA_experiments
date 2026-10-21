@@ -1,0 +1,22 @@
+# Standalone RTL-to-GDSII hardening of stochastic_multiplier in isolation
+# (not through the FABulous tile flow -- this is a plain LibreLane "Classic"
+# harden, same shape as librelane's own examples/spm/config.yaml).
+#
+# stochastic_multiplier is purely combinational (clk/rst_n are unused, kept
+# only to match this project's port-list convention -- see
+# Microarch_Lib docs/adr/0012) -- CLOCK_PORT/CLOCK_PERIOD are still declared
+# for STA bookkeeping even though there's nothing sequential to constrain.
+
+DESIGN_NAME: stochastic_multiplier
+VERILOG_FILES:
+  - dir::../../rtl/stochastic_multipler.sv
+CLOCK_PORT: clk
+CLOCK_PERIOD: 10
+
+# Tiny design (4 AND gates, ~30 um^2 of actual logic): utilization-based
+# floorplan auto-sizing has no sensible floor here -- even FP_CORE_UTIL=10
+# produced a die too narrow (17.02 um) for the default PDN strap
+# configuration (PDN-0185). Force an explicit minimum die size instead of
+# relying on utilization percentage.
+FP_SIZING: absolute
+DIE_AREA: [0, 0, 100, 100]

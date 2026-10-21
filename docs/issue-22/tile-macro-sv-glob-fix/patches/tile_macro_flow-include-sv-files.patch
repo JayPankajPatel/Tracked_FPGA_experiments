@@ -1,0 +1,22 @@
+diff --git a/fabulous/fabric_generator/gds_generator/flows/tile_macro_flow.py b/fabulous/fabric_generator/gds_generator/flows/tile_macro_flow.py
+index 3c2b8b7..c5bffdf 100644
+--- a/fabulous/fabric_generator/gds_generator/flows/tile_macro_flow.py
++++ b/fabulous/fabric_generator/gds_generator/flows/tile_macro_flow.py
+@@ -99,10 +99,15 @@ class FABulousTileVerilogMacroFlow(SequentialFlow):
+         design_dir: Path | None = None,
+         **custom_config_overrides: dict,
+     ) -> None:
+-        # Build file list
++        # Build file list. Includes .sv alongside .v: a custom BEL primitive
++        # (e.g. FABulous_binary_stochastic_converter_sync.sv) using SystemVerilog
++        # constructs (logic/always_ff/$clog2) would otherwise be silently dropped
++        # from VERILOG_FILES, causing a Verilator MODMISSING lint failure for any
++        # tile instantiating it.
+         file_list = [
+             str(f)
+-            for f in tile_type.tileDir.parent.glob("**/*.v")
++            for pattern in ("**/*.v", "**/*.sv")
++            for f in tile_type.tileDir.parent.glob(pattern)
+             if "macro" not in f.parts
+         ]
+         if models_pack := get_context().models_pack:

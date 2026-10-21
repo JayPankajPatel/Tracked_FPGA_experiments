@@ -1,0 +1,25 @@
+# Standalone RTL-to-GDSII hardening of stochastic_to_binary (the decoder)
+# in isolation. Real sequential logic: an accumulator register plus a
+# two-branch control FSM (see Microarch_Lib docs/adr/0017's boundary_in
+# redesign). Default WIDTH=4 -- same synthesizability-vs-accuracy caveat as
+# binary_stochastic_converter (docs/adr/0019): doesn't affect hardening.
+
+DESIGN_NAME: stochastic_to_binary
+VERILOG_FILES:
+  - dir::../../rtl/common/ma_assert.svh
+  - dir::../../rtl/stochastic_binary_converter.sv
+VERILOG_INCLUDE_DIRS:
+  - dir::../../rtl/common
+CLOCK_PORT: clk
+CLOCK_PERIOD: 10
+
+# Lessons applied from binary_stochastic_converter's hardening (see
+# ~/wiki/fpga_stochastic_blocks/reusable_lessons/
+# max-fanout-constraint-vs-max-slew-at-worst-corner.md): the default
+# MAX_FANOUT_CONSTRAINT=10 doesn't guarantee max slew at the worst corner
+# for a reset network feeding several flops directly. Applying the
+# verified fix proactively rather than rediscovering it.
+MAX_FANOUT_CONSTRAINT: 4
+
+FP_SIZING: absolute
+DIE_AREA: [0, 0, 200, 200]
