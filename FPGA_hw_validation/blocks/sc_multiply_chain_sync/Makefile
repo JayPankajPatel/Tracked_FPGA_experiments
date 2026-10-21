@@ -1,0 +1,19 @@
+MICROARCH_LIB ?= $(HOME)/Repos/Microarch_Lib
+export MICROARCH_LIB
+HERE := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+export HWB_SYNC := 1
+export HWB_GEN_DIR := $(HERE)/gen
+SIM ?= verilator
+TOPLEVEL_LANG := verilog
+M := $(MICROARCH_LIB)/blocks
+TB := $(M)/stochastic/verif/tb
+$(shell $(HERE)/../../scripts/make_sync_top.sh $(TB)/test_b_mult_s_integration/top.sv $(HERE)/gen/top_sync.sv)
+VERILOG_SOURCES := $(M)/basic/rtl/counter_sync.sv $(M)/stochastic/rtl/galois_lfsr_sync.sv $(M)/stochastic/rtl/binary_stochastic_converter_sync.sv \
+  $(M)/stochastic/rtl/stochastic_binary_converter_sync.sv $(M)/stochastic/rtl/stochastic_multiplier.sv $(HERE)/gen/top_sync.sv
+VERILOG_INCLUDE_DIRS := $(MICROARCH_LIB)/common/rtl
+COCOTB_TOPLEVEL := top
+COCOTB_TEST_MODULES := record
+COMPILE_ARGS += -sv -j 0 -Wno-WIDTHTRUNC -GWIDTH=8 -GINIT_SEED_A=1 -GINIT_SEED_B=204
+EXTRA_ARGS += --trace
+export PYTHONPATH := $(HERE):$(HERE)/../../verif:$(MICROARCH_LIB)/common/verif:$(PYTHONPATH)
+include $(shell cocotb-config --makefiles)/Makefile.sim
