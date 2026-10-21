@@ -15,7 +15,7 @@ cd FABulous_work/fabulous-v2                      # pinned v2.0.0b5 (4a2047b)
 ../../docs/issue-22/tile-macro-sv-glob-fix/apply-fix.sh .
 nix develop --command bash -c '
   export PDK_ROOT="$PWD/.pdk"
-  FABulous --project-dir fabric_btos_only_proj run "gen_tile_macro BTS"
+  FABulous --project-dir fabric_sc_proj run "gen_tile_macro BTS"
 '
 # => Report Manufacturability: Antenna/LVS/DRC Passed
 ```

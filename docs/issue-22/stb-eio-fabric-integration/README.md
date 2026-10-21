@@ -1,7 +1,7 @@
 # STB + E_IO fabric integration — tracked source backup
 
 `FABulous_work/fabulous-v2/` (this project's FABulous checkout, including every project under it
-such as `fabric_btos_only_proj/`) is entirely gitignored, clean-room. The fix that makes `STB`
+such as `fabric_sc_proj/`) is entirely gitignored, clean-room. The fix that makes `STB`
 (Stochastic-to-Binary) and its new `E_IO` east-edge tile stitch cleanly into the fabric
 (Antenna/LVS/DRC all Passed, `Circuits match uniquely`) therefore has no tracked copy anywhere
 else — this directory is that backup.
@@ -37,14 +37,14 @@ direction-line blocks in `E_IO.csv`.
 
 ```sh
 docs/issue-22/stb-eio-fabric-integration/restore-tile-files.sh \
-  FABulous_work/fabulous-v2/fabric_btos_only_proj
+  FABulous_work/fabulous-v2/fabric_sc_proj
 
 cd FABulous_work/fabulous-v2                      # pinned v2.0.0b5
 nix develop --command bash -c '
   export PDK_ROOT="$PWD/.pdk"
-  FABulous --project-dir fabric_btos_only_proj run "gen_fabric"
-  FABulous --project-dir fabric_btos_only_proj run "gen_all_tile_macros --parallel"
-  FABulous --project-dir fabric_btos_only_proj run "gen_fabric_macro"
+  FABulous --project-dir fabric_sc_proj run "gen_fabric"
+  FABulous --project-dir fabric_sc_proj run "gen_all_tile_macros --parallel"
+  FABulous --project-dir fabric_sc_proj run "gen_fabric_macro"
 '
 # => Final result: Circuits match uniquely. All LVS/DRC/Antenna metrics 0.
 ```

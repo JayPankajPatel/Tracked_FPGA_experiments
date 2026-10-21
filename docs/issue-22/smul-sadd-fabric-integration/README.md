@@ -1,7 +1,7 @@
 # SMUL + SADD fabric integration — tracked source backup
 
 `FABulous_work/fabulous-v2/` (this project's FABulous checkout, including every project under it
-such as `fabric_btos_only_proj/`) is entirely gitignored, clean-room. The `SMUL` (stochastic
+such as `fabric_sc_proj/`) is entirely gitignored, clean-room. The `SMUL` (stochastic
 multiplier) and `SADD` (stochastic adder) tiles built into the fabric this session therefore have
 no tracked copy anywhere else — this directory is that backup.
 
@@ -33,12 +33,12 @@ LVS: `Circuits match uniquely`, all LVS/DRC/Antenna metrics zero.
 
 ```sh
 docs/issue-22/smul-sadd-fabric-integration/restore-tile-files.sh \
-  FABulous_work/fabulous-v2/fabric_btos_only_proj
+  FABulous_work/fabulous-v2/fabric_sc_proj
 
 cd FABulous_work/fabulous-v2                      # pinned v2.0.0b5
 nix develop --command bash -c '
   export PDK_ROOT="$PWD/.pdk"
-  cd fabric_btos_only_proj
+  cd fabric_sc_proj
   FABulous --project-dir . run "gen_fabric"
   FABulous --project-dir . run "gen_all_tile_macros --parallel"
   FABulous --project-dir . run "gen_fabric_macro"

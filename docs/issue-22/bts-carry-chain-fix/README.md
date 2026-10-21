@@ -1,7 +1,7 @@
 # BTS tile carry-chain / pin-alignment fix — tracked source backup
 
 `FABulous_work/fabulous-v2/` (this project's FABulous checkout, including every project under it
-such as `fabric_btos_only_proj/`) is entirely gitignored, clean-room. The fix that makes the `BTS`
+such as `fabric_sc_proj/`) is entirely gitignored, clean-room. The fix that makes the `BTS`
 custom tile stitch cleanly into the fabric (Antenna/LVS/DRC all Passed, `Circuits match uniquely`)
 therefore has no tracked copy anywhere else — this directory is that backup.
 
@@ -30,14 +30,14 @@ a functionally-unused carry pin pair via FABulous's documented `(* CARRY="..." *
 
 ```sh
 docs/issue-22/bts-carry-chain-fix/restore-tile-files.sh \
-  FABulous_work/fabulous-v2/fabric_btos_only_proj/Tile/BTS
+  FABulous_work/fabulous-v2/fabric_sc_proj/Tile/BTS
 
 cd FABulous_work/fabulous-v2                      # pinned v2.0.0b5
 nix develop --command bash -c '
   export PDK_ROOT="$PWD/.pdk"
-  FABulous --project-dir fabric_btos_only_proj run "generate_custom_tile_config Tile/BTS"
-  FABulous --project-dir fabric_btos_only_proj run "run_pyscript $(pwd)/fabric_btos_only_proj/build_fabric.py"
-  FABulous --project-dir fabric_btos_only_proj run "gen_tile_macro BTS"
+  FABulous --project-dir fabric_sc_proj run "generate_custom_tile_config Tile/BTS"
+  FABulous --project-dir fabric_sc_proj run "run_pyscript $(pwd)/fabric_sc_proj/build_fabric.py"
+  FABulous --project-dir fabric_sc_proj run "gen_tile_macro BTS"
 '
 # => Report Manufacturability: Antenna/LVS/DRC Passed
 ```

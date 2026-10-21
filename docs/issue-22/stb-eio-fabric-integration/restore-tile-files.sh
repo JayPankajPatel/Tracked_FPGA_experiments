@@ -11,7 +11,7 @@
 #
 # Usage: docs/issue-22/stb-eio-fabric-integration/restore-tile-files.sh <path-to-project-dir>
 #   e.g. docs/issue-22/stb-eio-fabric-integration/restore-tile-files.sh \
-#          FABulous_work/fabulous-v2/fabric_btos_only_proj
+#          FABulous_work/fabulous-v2/fabric_sc_proj
 #
 # This restores ONLY the hand-authored source files (STB.csv, its BEL
 # wrapper, E_IO.csv, E_IO_switch_matrix.list, both tiles' gds_config.yaml,

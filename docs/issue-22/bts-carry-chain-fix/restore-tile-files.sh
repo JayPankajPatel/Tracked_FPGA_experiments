@@ -11,7 +11,7 @@
 #
 # Usage: docs/issue-22/bts-carry-chain-fix/restore-tile-files.sh <path-to-BTS-tile-dir>
 #   e.g. docs/issue-22/bts-carry-chain-fix/restore-tile-files.sh \
-#          FABulous_work/fabulous-v2/fabric_btos_only_proj/Tile/BTS
+#          FABulous_work/fabulous-v2/fabric_sc_proj/Tile/BTS
 #
 # This restores ONLY the two hand-authored source files (BTS.csv, the BEL
 # wrapper). Everything else under Tile/BTS/ (switch matrix, ConfigMem,
