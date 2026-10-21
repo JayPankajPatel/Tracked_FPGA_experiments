@@ -15,9 +15,9 @@ claim. **Pending** = run in progress or not yet done.
 | C2 | Naive seed-based decorrelation fails: seeds 1 and 2 are one LFSR step apart, so a multiplier approximates min(a,b) | Measured (Python golden model, N up to 2^16) | 3.2 |
 | C3 | With separated seeds, the multiply and add chains decode within 0.49 % and 4.31 % of full scale | Measured on hardware (WIDTH=8) | 3.3 |
 | C4 | The binary-to-stochastic and stochastic-to-binary converters, not the multiplier, dominate area | Measured (sky130 standard-cell area); reproduces Alaghi and Hayes 2013 | 3.4 |
-| C5 | A hardened converter tile replaces roughly 6 to 10 LUT4AB tiles of soft logic | Measured as synthesis cell counts (not placed) | 3.5 |
+| C5 | A hardened converter tile replaces roughly 6 to 10 LUT4AB tiles of soft logic; in tile area that is about 8 to 13 times smaller | Measured: synthesis cell counts and hardened tile areas (not placed) | 3.5 |
 | C6 | Adding a custom tile to a FABulous fabric needs three non-obvious rules (dummy carry, `.sv` glob patch, edge-IO block order) | Measured (each rule found from a failed LVS or lint run) | 3.6 |
-| C7 | The fabric with BTS and STB tiles hardens LVS, DRC and antenna clean | Measured on the earlier 2026-09-14 run; **re-run pending** | 3.7 |
+| C7 | The fabric with BTS and STB tiles hardens LVS, DRC and antenna clean | Measured, 2026-09-14 and re-run 2026-10-21 | 3.7 |
 
 ## 2. Test setup
 
@@ -118,8 +118,27 @@ recipe in each `Stochastic_Blocks/librelane/<block>/config.yaml`.
 
 A `LUT4AB` tile holds 8 LUT/flop slots, so ideal packing needs about 10 tiles for BTS and 6 for STB. The hard versions
 occupy one standard 246 by 245 µm tile each and use no LUTs.
+
+Hardened tile areas (`design__instance__area__stdcell` from each tile's `macro/final_views/metrics.json`, 2026-10-21):
+
+| Tile | Std-cell area (µm²) | Utilization of the 60,413 µm² footprint |
+|---|---|---|
+| `LUT4AB` | 30,609 | 53 % |
+| `BTS` | 24,054 | 42 % |
+| `STB` | 21,788 | 38 % |
+| `RegFile` | 32,525 | 53 % |
+| `W_IO` / `E_IO` | 7,254 / 7,257 | 13 % |
+
+With ideal packing the soft version costs about 10 × 30,609 = 306 k µm² for BTS and 6 × 30,609 = 184 k µm² for STB,
+against 24 k and 22 k for the hard tiles: about 13 times and 8 times smaller in tile area.
+
+**Important caveat on the hard tile cost.** A BTS tile is 79 % of a LUT4AB's area even though the BTS logic alone is
+about 1.9 k µm² (3.4). Most of every tile is its switch matrix and configuration memory, which a hard tile still carries.
+So the converter logic is only about 8 % of its tile, and the saving comes from needing one tile instead of many, not
+from the logic shrinking. A tile can take up to 32 inputs and 8 outputs, so placing several converters in one tile
+would amortize this overhead. That has not been tried.
 **Means.** Hardening the converters turns roughly 6 to 10 tiles of soft logic into one tile. That is the fabric-level
-argument for hardening them, in the same units (LUTs) as the survey's Table III.
+argument for hardening them, in the same units (LUTs) as the survey's Table III, and the tile-area table puts a number on it.
 **Does not mean.** These are synthesis cell counts. Packing in a placed design is worse, and routing between LUTs adds
 switch-matrix hops. No Fmax or power was compared. STB is WIDTH=6, not 8, because FABulous limits a tile to 8 outputs.
 The comparison against a hardened binary INT4 MAC tile, which is the planned headline comparison, has not been made.
@@ -156,11 +175,16 @@ they are sufficient.
   full 255-bit bursts. This is an RTL-level zero-delay model, not a simulation of the hardened macro. The test bench
   needed its pin mapping fixed because E_IO had doubled the IO count to 56 and interleaved the west and east pins; the
   RTL was not at fault.
-- **Re-run on the reduced project: pending.** `gen_all_tile_macros` and `gen_fabric_macro` were started on
-  2026-10-21 and results go in this section when they finish.
+- **Re-run on the reduced project (2026-10-21):** SMUL and SADD removed, BTS and STB kept. `run_FABulous_fabric`,
+  `gen_all_tile_macros --parallel` and `gen_fabric_macro` all completed. Fabric macro metrics: LVS error, device
+  difference, unmatched device, net and pin counts all 0; KLayout DRC 0; antenna violating nets and pins 0;
+  disconnected pins 0. Every tile (including BTS and STB) also reports LVS, DRC, route DRC and antenna at 0. Macro size
+  2478.02 by 3930.40 µm (9.74 mm²) with 156 tile macros.
 
-**Means.** The fabric is manufacturable-clean (earlier run) and functionally correct for BTS (this run).
-**Does not mean.** Timing is closed. The `.lib` timing models for the hardened macros are tracked in issue #21 and do
+**Means.** The fabric with the stochastic tiles is manufacturable-clean (two independent runs) and functionally correct
+for BTS.
+**Does not mean.** Timing is closed. The 14 by 10 fabric is taller than the Caravel user area (3930 against 3520 µm), so
+it would not fit a Caravel shuttle as is; the classic 8x8 fabric does. The `.lib` timing models for the hardened macros are tracked in issue #21 and do
 not exist yet. No STB fabric simulation exists, and no gate-level simulation of the final netlist has been run.
 
 ### 3.8 Timing and slew lesson (supporting)
