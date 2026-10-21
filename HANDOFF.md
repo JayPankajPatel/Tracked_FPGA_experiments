@@ -1,5 +1,47 @@
 # HANDOFF
 
+## 2026-09-14 (cont'd) — Issue #22: SMUL + SADD tiles added — clean on first try
+
+**Branch:** `feature/22-stochastic-block-v0` (same as above; `FABulous_work/` still gitignored).
+
+**What landed:** stochastic multiplier (`SMUL`) and stochastic adder (`SADD`) added as individual
+tiles (user decision: try standalone tiles before a fused MAC), replacing two more `LUT4AB`
+columns. Fabric grid now: `W_IO,BTS,LUT4AB,RegFile,SMUL,LUT4AB,SADD,LUT4AB,STB,E_IO`.
+
+Both built with the dummy-`CARRY` methodology applied **from the start** (not retrofitted after a
+failure, unlike `BTS`): `SMUL` wraps a pure combinational AND-join BEL (no clock/state); `SADD`
+wraps a select-RNG MUX BEL with one internal `galois_lfsr_sync` (vendored self-contained, stripping
+the shared `ma_assert.svh` include/assertions and the formal-only block, same pattern as `STB`'s
+precedent). Both hardened cleanly at the tile level and the full-fabric level **on the first
+attempt** — no pin-alignment debugging needed this round, validating that the methodology written
+up from the `BTS` and `STB`/`E_IO` incidents actually generalizes.
+
+Full fabric result: `Final result: Circuits match uniquely.` All eleven LVS/DRC/Antenna metrics
+zero. Device counts match exactly both sides (14 each of `SMUL`/`SADD`, 42 remaining `LUT4AB`,
+34056 nets).
+
+**One CLI gotcha, environmental not a bug:** `generate_custom_tile_config Tile/<Name>` failed with
+`Tile/<Name> is not a directory or does not exist` when run via `FABulous --project-dir
+fabric_btos_only_proj run "..."` from the parent directory; worked once the shell's cwd was already
+inside the project dir (`cd fabric_btos_only_proj && FABulous --project-dir . run "..."`).
+
+**Durable writeups:**
+- `~/wiki/fpga_stochastic_blocks/experiments/smul-sadd-tile-integration-2026-09-14.md`
+- `docs/issue-22/smul-sadd-fabric-integration/` — tracked backup of `SMUL`/`SADD` source files and
+  the updated `fabric.csv`, with a restore script
+
+**Open questions / next action:**
+1. User plans to attempt a real MPW shuttle hardening next (ChipIgnite under consideration,
+   tooling download in progress). The current 10-column fabric almost certainly exceeds Caravel's
+   user-project area — the pre-existing shrunk 8x8 Caravel-fitting fabric (see
+   `~/wiki/fpga_stochastic_blocks/decision_logs/caravel-shrunk-fabric-decision-2026-06-15.md` and
+   `~/wiki/fpga_stochastic_blocks/experiments/shrunk-caravel-fabric-harden-2026-06-15.md`) needs
+   `BTS`/`STB`/`SMUL`/`SADD` folded in before a shuttle attempt, not this full-size fabric as-is.
+2. Fused-MAC-vs-individual-tiles decision still open; revisit once area/timing data exists.
+3. No code committed to `main` or pushed; this session's docs/wiki changes still need review.
+
+---
+
 ## 2026-09-14 — Issue #22: STB + E_IO fabric integration — clean RTL→GDSII (BTS+STB+E_IO)
 
 **Branch:** `feature/22-stochastic-block-v0` (same branch; `FABulous_work/` itself is gitignored,

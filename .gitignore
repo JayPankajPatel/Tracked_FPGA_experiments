@@ -21,3 +21,10 @@ result-*
 
 # Modern ChipFoundry Caravel harness (clean-room external dep; cloned via Makefile)
 /Librelane_work/caravel_user_project/
+
+# Standalone LibreLane hardening runs for individual stochastic blocks
+# (Stochastic_Blocks/librelane/<block>/config.yaml is the tracked recipe;
+# each run regenerates hundreds of MB of intermediate stage logs/databases
+# under runs/, only the final GDS/reports matter and those are recorded
+# in commit messages / wiki writeups, not committed wholesale here).
+/Stochastic_Blocks/librelane/*/runs/
