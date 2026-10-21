@@ -1,0 +1,7 @@
+# Standard 245x245 tile footprint, matching every other single-width tile
+# in the fabric (see docs/issue-22/bts-carry-chain-fix/ for why this matters
+# for pin alignment). If this is too small once actually hardened, the real
+# minimum can be found the same way BTS's was: run with --optimise balance
+# first to get a size estimate, then verify with a real no_opt harden at the
+# standard footprint before assuming the estimate is accurate.
+DIE_AREA: [0, 0, 246, 245]
