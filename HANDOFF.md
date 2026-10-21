@@ -1,167 +1,35 @@
 # HANDOFF
 
-## 2026-09-14 (cont'd) — Issue #22: SMUL + SADD tiles added — clean on first try
+## 2026-10-14 — Issue #27: on-hardware validation of every stochastic block (Zybo Z7-10)
 
-**Branch:** `feature/22-stochastic-block-v0` (same as above; `FABulous_work/` still gitignored).
+**Branch:** `feature/27-zybo-hw-validation` (worktree `../Tracked_FPGA_experiments_hwval`, branched from `origin/main`;
+pushed, no PR opened yet).
 
-**What landed:** stochastic multiplier (`SMUL`) and stochastic adder (`SADD`) added as individual
-tiles (user decision: try standalone tiles before a fused MAC), replacing two more `LUT4AB`
-columns. Fabric grid now: `W_IO,BTS,LUT4AB,RegFile,SMUL,LUT4AB,SADD,LUT4AB,STB,E_IO`.
+**Goal:** confirm each stochastic RTL block actually works on silicon, with reusable scripts, using VIO + ILA over the
+remote-JTAG tunnel (`~/Programs/AMD/remote_fpga_jtag/`).
 
-Both built with the dummy-`CARRY` methodology applied **from the start** (not retrofitted after a
-failure, unlike `BTS`): `SMUL` wraps a pure combinational AND-join BEL (no clock/state); `SADD`
-wraps a select-RNG MUX BEL with one internal `galois_lfsr_sync` (vendored self-contained, stripping
-the shared `ma_assert.svh` include/assertions and the formal-only block, same pattern as `STB`'s
-precedent). Both hardened cleanly at the tile level and the full-fabric level **on the first
-attempt** — no pin-alignment debugging needed this round, validating that the methodology written
-up from the `BTS` and `STB`/`E_IO` incidents actually generalizes.
+**Result:** all 18 block configurations (+ heartbeat) PASS bit-exact on a real xc7z010; every block's negative control
+fails as required. Table in `FPGA_hw_validation/README.md`; ILA captures (`.ila/.csv/.vcd`) tracked in
+`FPGA_hw_validation/waveforms/`. Multiply chain max error 0.49% FS, add chain 4.31% FS (WIDTH=8, seeds 1/204).
 
-Full fabric result: `Final result: Circuits match uniquely.` All eleven LVS/DRC/Antenna metrics
-zero. Device counts match exactly both sides (14 each of `SMUL`/`SADD`, 42 remaining `LUT4AB`,
-34056 nets).
+**How:** record (cocotb/Verilator, golden models asserted) -> replay from on-chip ROM (`rtl/hwb_core.sv`) -> ILA capture ->
+`verif/compare_trace.py`. One command per block: `scripts/run_replay_block.sh <block>`; all: `scripts/run_hw_regression.sh`.
+RTL/benches are referenced from `~/Repos/Microarch_Lib` (not modified).
 
-**One CLI gotcha, environmental not a bug:** `generate_custom_tile_config Tile/<Name>` failed with
-`Tile/<Name> is not a directory or does not exist` when run via `FABulous --project-dir
-fabric_btos_only_proj run "..."` from the parent directory; worked once the shell's cwd was already
-inside the project dir (`cd fabric_btos_only_proj && FABulous --project-dir . run "..."`).
+**Commands run:** hw_check, build_block/run_block per block, run_hw_regression (several batches). One batch was interrupted
+when the board was unplugged mid-run; the affected blocks were rerun after reconnect (no result was taken from the
+interrupted run).
 
-**Durable writeups:**
-- `~/wiki/fpga_stochastic_blocks/experiments/smul-sadd-tile-integration-2026-09-14.md`
-- `docs/issue-22/smul-sadd-fabric-integration/` — tracked backup of `SMUL`/`SADD` source files and
-  the updated `fabric.csv`, with a restore script
+**Not covered / open:**
+1. RTL on Xilinx 7-series only. sky130 / FABulous netlists still need gate-level simulation or an LEC pass (user plans to
+   look for an LEC tool; survey not started).
+2. One config per block (WIDTH=8). Parameter sweeps stay in simulation (Microarch_Lib `sweep_widths.sh`, formal).
+3. Seeds (1,2) at WIDTH=8 are 1 LFSR step apart -> multiplier ~ min(a,b); the chains here use (1,204).
+4. `HANDOFF.md` on `feature/22-stochastic-block-v0` has uncommitted edits; this entry is on top of `origin/main`'s version, so
+   expect a trivial merge when both land.
+5. Wiki: `~/wiki/fpga_stochastic_blocks/experiments/zybo-hw-validation-2026-10-14.md` (+ index line).
 
-**Open questions / next action:**
-1. User plans to attempt a real MPW shuttle hardening next (ChipIgnite under consideration,
-   tooling download in progress). The current 10-column fabric almost certainly exceeds Caravel's
-   user-project area — the pre-existing shrunk 8x8 Caravel-fitting fabric (see
-   `~/wiki/fpga_stochastic_blocks/decision_logs/caravel-shrunk-fabric-decision-2026-06-15.md` and
-   `~/wiki/fpga_stochastic_blocks/experiments/shrunk-caravel-fabric-harden-2026-06-15.md`) needs
-   `BTS`/`STB`/`SMUL`/`SADD` folded in before a shuttle attempt, not this full-size fabric as-is.
-2. Fused-MAC-vs-individual-tiles decision still open; revisit once area/timing data exists.
-3. No code committed to `main` or pushed; this session's docs/wiki changes still need review.
-
----
-
-## 2026-09-14 — Issue #22: STB + E_IO fabric integration — clean RTL→GDSII (BTS+STB+E_IO)
-
-**Branch:** `feature/22-stochastic-block-v0` (same branch; `FABulous_work/` itself is gitignored,
-so this session's actual deliverable is tracked wiki/docs writeups + backups, not repo diffs to
-the fabric project itself).
-
-**Goal:** add `STB` (Stochastic-to-Binary) into `FABulous_work/fabulous-v2/fabric_btos_only_proj/`
-alongside the already-integrated `BTS` (Binary-to-Stochastic), and get a fully clean RTL→GDSII
-fabric (LVS/DRC/Antenna all signed off).
-
-**What landed:**
-- `STB` scaffolded using the established `BTS` methodology (dummy `(* CARRY="dummy" *)` BEL
-  attribute so its switch-matrix pin count/ordering matches every carry-capable tile; `WIDTH`
-  reduced from 8 to 6 to fit FABulous's fixed 8-output switch-matrix-generation limit). Hardens
-  cleanly alone.
-- Fabric grid changed from 9 to 10 columns per direct user instruction ("get rid of col 8 and
-  change W_IO to E_IO"): `W_IO,BTS,LUT4AB,RegFile,LUT4AB,LUT4AB,LUT4AB,LUT4AB,STB,E_IO`. `STB`
-  replaced one `LUT4AB` column; `E_IO` is a newly built east-edge IO tile (the old `RAM_IO`/
-  `N_term_RAM_IO`/`S_term_RAM_IO` tiles and their stale `macro/` dirs were removed).
-- `E_IO` was hand-mirrored from `W_IO` (the only existing edge-IO tile) and hit a real
-  fabric-stitch LVS failure: `Netlists do not match`, initially misdiagnosed (via a first,
-  incorrect `advisor` pass) as a benign netgen symmetry/automorphism artifact. A second pass,
-  prompted by dumping the raw netgen `badnets` JSON and noticing port *names* differed between the
-  layout-extracted and schematic netlists for nominally the same net, caught the real defect: a
-  tile's edge-pin Y-slot is set by CSV direction-line **declaration order**, not by port name or
-  the `WEST`/`EAST` keyword. The mirrored `E_IO.csv` had its two direction-line blocks in the
-  opposite order from `W_IO.csv`, so `E_IO`'s OUTPUT pins landed in the same physical Y-slot as
-  `STB`'s own OUTPUT pins — two drivers shorted together. Fixed by reordering (not renaming) the
-  two blocks. Verified via direct `.lef` pin-geometry comparison before and after.
-- Full fabric re-hardened (all tile macros + fabric-stitch) inside the pinned nix devshell.
-  **Result: `Final result: Circuits match uniquely.`** All structured sign-off metrics zero:
-  `design__lvs_{device_difference,error,net_difference,property_fail,unmatched_device,
-  unmatched_net,unmatched_pin}__count`, `klayout__drc_error__count`,
-  `antenna__violating__{nets,pins}`, `route__antenna_violation__count` — all `0`. Device/net
-  counts (156 devices, 34056 nets) identical before/after the fix, confirming only pin position
-  changed, not netlist topology.
-
-**Commands run (representative):**
-```sh
-cd FABulous_work/fabulous-v2
-export PDK_ROOT="$PWD/.pdk"
-nix develop . --command bash -c 'FABulous --project-dir fabric_btos_only_proj run "gen_fabric"'
-nix develop . --command bash -c 'FABulous --project-dir fabric_btos_only_proj run "gen_tile_macro E_IO"'
-nix develop . --command bash harden-btos-inner.sh   # gen_all_tile_macros --parallel + gen_fabric_macro
-```
-
-**One process note:** re-running `harden-btos-inner.sh` directly (outside `nix develop`) picked up
-a stray `oss-cad-suite` yosys ahead of the nix-provided one in `$PATH`, causing a spurious
-`Error parsing options: Option 'y' does not exist` failure on `W_IO`'s tile macro — an environment
-mistake, not a design regression. Always invoke fabric-hardening scripts through `nix develop .
---command bash ...`, never bare.
-
-**Durable writeups:**
-- `~/wiki/fpga_stochastic_blocks/experiments/stb-eio-mirrored-tile-pin-slot-fix-2026-09-14.md`
-- `~/wiki/fpga_stochastic_blocks/reusable_lessons/fabulous-custom-tile-authoring-methodology.md`
-  (step 9 added: mirroring an edge-IO tile requires matching direction-line block order, not just
-  line content)
-- `docs/issue-22/stb-eio-fabric-integration/` — tracked backup of the fixed `STB`/`E_IO` source
-  files and final `fabric.csv` (since `FABulous_work/` is gitignored), with a restore script
-
-**Open questions / next action:**
-1. Scaffold the stochastic adder and multiplier tiles using the same methodology (dummy `CARRY`
-   from the start; apply the corrected mirroring procedure if either needs a new edge-facing tile).
-2. User review of this session's wiki/docs changes; no code was committed to `main` or pushed.
-3. Consider whether `E_IO`'s corrected `.csv` should be promoted into a reusable template/generator
-   rather than hand-authored again for any future edge tile.
-
----
-
-## 2026-09-06 — Issue #22: v0 stochastic-block evidence closed; real LFSR decorrelation gap found
-
-**Branch:** `feature/22-stochastic-block-v0` (local-only, pending user review/push).
-
-**What landed:** all four issue #22 acceptance criteria met.
-- `Stochastic_Blocks/rtl/`: parameterized LFSR + comparator SNG (`galois_lfsr.sv`,
-  `binary_stochastic_converter.sv`) + AND-multiplier (`stochastic_multipler.sv`), ported from
-  `Microarch_Lib`'s verified, formally-checked, mutation-tested implementation (user's own call:
-  reuse the verified source over generalizing the fabric-validated `lfsr8.v`).
-- `Stochastic_Blocks/tb/accuracy_and_correlation_sweep.py` + `Stochastic_Blocks/results/`:
-  accuracy-vs-N (2^4..2^16) and correlation-sensitivity metrics across 5 decorrelation strategies,
-  4 representative (p1,p2) pairs.
-- Cheap sky130 synthesis smoke (oss-cad-suite yosys, `sky130_fd_sc_hd__tt_025C_1v80.lib`):
-  `binary_stochastic_converter` (WIDTH=4) = 635.6 µm² / 57 cells; `stochastic_multiplier` =
-  25.0 µm² / 4 cells, both clean, no black boxes.
-- Decision note promoted to wiki:
-  `~/wiki/fpga_stochastic_blocks/decision_logs/stochastic-v0-evidence-and-v1-candidate-2026-09-06.md`
-  (v1 candidate confirmed as the hard-SC-tile direction already named in `roadmap-2026-h2.md`'s
-  by-winter table — not new evidence-driven news; the correlation finding below is).
-
-**Real finding (the actual v0 contribution):** naive "pick a different seed" LFSR decorrelation
-does not reliably work. Adjacent integer seeds (1, 2) turned out to be only 1 LFSR step apart on
-the state cycle at both WIDTH=4 and WIDTH=8 — nearly fully correlated, not independent. Measured
-error with that seed pair: avg 0.038 vs a true-random-control floor of 0.0016, and confirmed via
-direct N-sweep to be a **fixed structural bias that plateaus once N exceeds the LFSR period**, not
-sampling noise that shrinks with more samples. Two mitigations found and verified across all 4
-tested (p1,p2) pairs: a phase-separated seed (~half period) or a genuinely different LFSR
-polynomial per operand. Answers the wiki's previously-open "correlation-management cost" question
-with a first concrete data point.
-
-**Directly implicates `Microarch_Lib` (separate repo):** that session's `test_b_mult_s_integration`
-and `test_b_add_s_integration` integration tests use exactly `INIT_SEED_A=1`/`INIT_SEED_B=2` at
-WIDTH=4 — the specific near-worst-case pair this experiment flagged. Those tests are still correct
-for what they check (structural: `binary_out` honestly counts what the multiplier/adder actually
-output), but the numeric accuracy of that specific default was never checked until now. Follow-up:
-file a `Microarch_Lib` issue to fix those defaults; the existing `DistinctEncoderSeeds`/
-`SelectLFSRDecorrelatedFromOperands` elaboration checks there (ADR 0015/0018) only reject the
-fully-identical case, not this near-identical-phase case.
-
-**Not yet done:** a direct RTL/cocotb cross-check of these specific accuracy numbers (this
-experiment used a Python golden model, already cross-validated against the RTL's protocol
-behavior in `Microarch_Lib` but not re-run at the RTL level for this specific accuracy claim) —
-reasonable v1 scope, not required to close v0.
-
-**Next recommended action:**
-1. User review of `feature/22-stochastic-block-v0` branch; push + open PR linking issue #22 if
-   approved.
-2. File the `Microarch_Lib` seed-default issue.
-3. When Sept's hard-SC-tile work (`roadmap-2026-h2.md`'s Arms 3-4) starts, check whether it has an
-   analogous multi-source decorrelation requirement and verify it the same way before trusting any
-   accuracy claim.
+**Next recommended action:** open the PR for #27 (needs the user's OK); then survey LEC tools for the sky130/FABulous netlists.
 
 ---
 
