@@ -1,0 +1,29 @@
+# Standalone RTL-to-GDSII hardening of the full add chain:
+# 2x binary_stochastic_converter (encoders) -> stochastic_adder ->
+# stochastic_to_binary (decoder). Physical-layout equivalent of
+# Microarch_Lib's test_b_add_s_integration/top.sv, already fully verified
+# in cocotb simulation. Promoted here as `sc_add_chain_top` (renamed from
+# `top`), mirroring sc_multiply_chain's hardening.
+
+DESIGN_NAME: sc_add_chain_top
+VERILOG_FILES:
+  - dir::../../rtl/common/ma_assert.svh
+  - dir::../../rtl/counter.sv
+  - dir::../../rtl/galois_lfsr.sv
+  - dir::../../rtl/binary_stochastic_converter.sv
+  - dir::../../rtl/stochastic_binary_converter.sv
+  - dir::../../rtl/stochastic_adder.sv
+  - dir::../../rtl/integration/sc_add_chain_top.sv
+VERILOG_INCLUDE_DIRS:
+  - dir::../../rtl/common
+CLOCK_PORT: clk
+CLOCK_PERIOD: 10
+
+# Fanout/slew fix applied proactively (see ~/wiki/fpga_stochastic_blocks/
+# reusable_lessons/max-fanout-constraint-vs-max-slew-at-worst-corner.md).
+MAX_FANOUT_CONSTRAINT: 4
+
+# Similar scale to sc_multiply_chain (2 encoders + one join module +
+# decoder); same die size worked there.
+FP_SIZING: absolute
+DIE_AREA: [0, 0, 300, 300]

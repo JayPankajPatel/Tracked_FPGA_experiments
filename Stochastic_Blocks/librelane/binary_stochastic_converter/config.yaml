@@ -1,0 +1,48 @@
+# Standalone RTL-to-GDSII hardening of binary_stochastic_converter in
+# isolation (not through the FABulous tile flow) -- the encoder, with real
+# sequential logic (counter + galois_lfsr submodules, a two-branch control
+# FSM), unlike stochastic_multiplier's pure combinational AND gates.
+#
+# Default WIDTH=4 (matches every other verification this block has had --
+# see Microarch_Lib docs/adr/0019 for why WIDTH=4's *numeric* output isn't
+# trustworthy; that caveat is about stochastic-multiply accuracy, not
+# synthesizability, so it doesn't affect this hardening run).
+
+DESIGN_NAME: binary_stochastic_converter
+# ma_assert_std.svh/ma_assert_dummy.svh are transitively `include`d by
+# ma_assert.svh's own tool-dispatch ifdef (see Microarch_Lib docs/adr/0001)
+# -- only ma_assert.svh belongs here. Listing all three directly (an
+# earlier mistake in this config) caused both implementation files to be
+# read as independent top-level units, redefining MA_ASSERT_ELABOR twice
+# (Verilator REDEFMACRO warning, confirmed via the lint log before fixing).
+VERILOG_FILES:
+  - dir::../../rtl/common/ma_assert.svh
+  - dir::../../rtl/counter.sv
+  - dir::../../rtl/galois_lfsr.sv
+  - dir::../../rtl/binary_stochastic_converter.sv
+VERILOG_INCLUDE_DIRS:
+  - dir::../../rtl/common
+CLOCK_PORT: clk
+CLOCK_PERIOD: 10
+
+# Root cause (found via LibreLane's own timing_corners.md doc + OpenROAD
+# issue #2354 on GitHub, matching this exact failure shape: a repair-
+# inserted buffer satisfies the violation it was inserted for, but
+# introduces/leaves a different one uncaught): the violating net drives
+# EXACTLY 10 loads, matching MAX_FANOUT_CONSTRAINT's default value of 10
+# (hardcoded in librelane/config/pdk_compat.py). set_max_fanout only
+# constrains load COUNT, not capacitive drive requirement -- "fanout <= 10"
+# doesn't guarantee the buffer can still swing fast enough at the
+# slow-slow corner. Neither DESIGN_REPAIR_MAX_SLEW_PCT nor
+# RUN_POST_GRT_DESIGN_REPAIR (both tried, neither worked -- see git history
+# of this file) address this: the fanout target itself is too loose.
+# Tightening it should force a genuine multi-stage buffer tree instead of
+# one buffer driving all 10 loads directly.
+MAX_FANOUT_CONSTRAINT: 4
+
+# Explicit die size, sized up from stochastic_multiplier's working 100x100
+# (this design has real logic -- ~636 um^2 per the earlier Yosys sky130
+# estimate -- but utilization-based auto-sizing still risks the same
+# PDN-strap-width failure that forced an explicit size there).
+FP_SIZING: absolute
+DIE_AREA: [0, 0, 200, 200]
