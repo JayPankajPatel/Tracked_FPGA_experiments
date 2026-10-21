@@ -284,8 +284,7 @@ and that the manufacturability report shows Antenna/LVS/DRC `Passed`. Also grep 
 
 Do this before the multi-hour fabric harden. Map a design that exercises the tile through Flow A
 and run `Librelane_work/chip_wrapper/tools/run_shrunk_validation.sh`. The SMUL/SADD chain
-testbench (`user_design_shrunk/sc_multiply_chain_fabric_tb.v`) is the closest example, but it is
-still uncommitted on `feature/22-stochastic-block-v0`. Grep the output
+testbench (`user_design_shrunk/sc_multiply_chain_fabric_tb.v`) is the closest example. Grep the output
 for `PASS:`, because the sims exit 0 even on a FAIL display. Use Verilator 2-state for gate-level
 sims, since icarus X-locks on this netlist family.
 
@@ -313,7 +312,7 @@ The GDSII is under `Fabric/macro/final_views/gds/`.
 
 1. Copy the new tile's `.csv`, BEL `.sv`, `gds_config.yaml`, switch-matrix `.list` (if
    hand-authored) and the updated `fabric.csv` into `docs/issue-<n>/<name>/source/`, with a
-   `restore-tile-files.sh` modelled on `docs/issue-22/stb-eio-fabric-integration/`.
+   `restore-tile-files.sh` modelled on `docs/issue-22/smul-sadd-fabric-integration/`.
 2. Add the result to `HANDOFF.md`, and any new failure mode to the wiki reusable lesson.
 3. If the fabric size or tile set changed, re-diff `rtl/efpga_top_caravel_bb.v` against the new
    macro (Flow B's note) and re-run the chip-wrapper checks.
@@ -331,7 +330,7 @@ The GDSII is under `Fabric/macro/final_views/gds/`.
 - `docs/issue-22/bts-carry-chain-fix/` — dummy `CARRY` for tiles with no carry chain.
 - `docs/issue-22/stb-eio-fabric-integration/` — edge-IO mirroring and direction-line block order.
 - `docs/issue-22/smul-sadd-fabric-integration/` — the same methodology applied cleanly the first
-  time (uncommitted on `feature/22-stochastic-block-v0` as of this writing).
+  time.
 - `docs/issue-12/root-cause.md` — fabric-stitch IO-placement fix.
 
 ---
