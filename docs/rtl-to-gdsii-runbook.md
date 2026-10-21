@@ -16,6 +16,7 @@ over this document and update it.
 | Get a cheap area/gate-count datapoint for a standalone RTL module, no fabric at all | **C: Standalone sky130 synthesis smoke** | Seconds | Yes, but Yosys-only, no P&R |
 | Get a real, signed-off GDSII of one RTL module in isolation (not the fabric, not mapped onto anything) | **D: Standalone RTL-to-GDSII of one block** | Minutes | Yes, full LibreLane P&R |
 | Change the fabric's own architecture (tile count, tile types) and produce a new physical macro | **B: Harden the fabric itself** | Hours, tens of GB RAM | Yes, full LibreLane P&R |
+| Add a new custom tile (new hardened block) and carry it through to the full-fabric GDS | **E: New custom tile to full fabric** | Hours (B's cost plus authoring) | Yes, full LibreLane P&R |
 
 Flow A is what you want almost all the time — "run my design on the FPGA I already built."
 Flow B is rare and expensive — only needed if the *fabric itself* changes (different tile
@@ -178,6 +179,191 @@ The GDSII file itself is under `Fabric/macro/final_views/gds/`.
 
 ---
 
+## Flow E — New custom tile to full-fabric GDSII
+
+Use this when a new hardened block (e.g. `BTS`, `STB`, `SMUL`, `SADD`) becomes a **tile** in the
+fabric. It is the front half that Flow B assumes already exists: author the tile, harden it alone,
+then harden the whole fabric. Every step below was hit and solved during issue #22; the root-cause
+writeups are linked at the end. The reusable-lesson version of the tile rules is
+`~/wiki/fpga_stochastic_blocks/reusable_lessons/fabulous-custom-tile-authoring-methodology.md`.
+
+`FABulous_work/` is gitignored, so tile sources live only there. The tracked backups are under
+`docs/issue-22/*/source/` with a `restore-tile-files.sh` each. After authoring a new tile, copy its
+files into a new `docs/issue-<n>/<name>/source/` the same way, or they exist nowhere in git.
+
+**Project directory:** the issue-22 READMEs say `fabric_btos_only_proj`, which no longer exists on
+disk. The current stochastic project is `FABulous_work/fabulous-v2/fabric_sc_proj` (grid
+`W_IO,BTS,LUT4AB,RegFile,LUT4AB,…,STB,E_IO`). Substitute it in those READMEs' commands. Check
+`ls FABulous_work/fabulous-v2` first, since project names change.
+
+All `FABulous` commands run inside the Nix devshell (see **Environment setup**):
+
+```bash
+cd ~/Repos/Tracked_FPGA_experiments/FABulous_work/fabulous-v2     # pinned v2.0.0b5
+nix develop --command bash -c '
+  export PDK_ROOT="$PWD/.pdk"
+  FABulous --project-dir fabric_sc_proj run "<command>"
+'
+```
+
+### Stage 0 — Prove the RTL first
+
+Functional correctness comes before any physical step (LVS/DRC prove manufacturability, not
+function). Run the block's cocotb bench in `~/Repos/Microarch_Lib`, and for a stochastic block
+optionally the on-FPGA replay check in `FPGA_hw_validation/`. Both test the RTL, not the FABulous
+wrapper, so Stage 6 still needs a fabric-level simulation.
+
+### Stage 1 — Write the BEL as one self-contained `.sv` under `Tile/<Name>/`
+
+- Vendor the RTL into the tile directory. File discovery is scoped to the tile's own tree, so do
+  not reference `Stochastic_Blocks/rtl/` or `Microarch_Lib`.
+- Tag the ports on the BEL top module: `(* FABulous, EXTERNAL, SHARED_PORT *) input logic UserCLK`
+  for the clock, and `SHARED_RESET` / `SHARED_ENABLE` for a shared reset or enable.
+- **Add a dummy carry pair even if the tile has no arithmetic.** Put
+  `(* CARRY="dummy" *)` on one unused input and one unused output, and tie them
+  together (`assign out = in;`). Without it the tile has one fewer real pin than carry-capable
+  tiles like `LUT4AB`, `UserCLK` lands one pin-width out of alignment, and fabric-stitch LVS fails
+  with no earlier symptom. Reference: `docs/issue-22/bts-carry-chain-fix/`.
+- The tile generator supports at most 32 input and 8 output BEL ports in total per tile (shared
+  reset/enable and `CARRY` ports don't count). This is why `STB` uses `WIDTH=6`.
+- Port declarations go one per line, and the BEL needs a `NoConfigBits` parameter (0 if it has no
+  config bits). A BEL with config bits also needs a `BelMap` attribute.
+- The docs call tile generation experimental. Read every generated file.
+- Pure `.sv` BELs need the tile-macro glob patch (tracked, idempotent):
+
+  ```bash
+  docs/issue-22/tile-macro-sv-glob-fix/apply-fix.sh FABulous_work/fabulous-v2
+  ```
+
+  Skip it and hardening dies at `Verilator MODMISSING` before floorplan.
+
+### Stage 2 — Scaffold the tile config with the tool
+
+```bash
+# Delete stale generated files first, including <Name>.csv, *_switch_matrix.*,
+# *_ConfigMem.*, *_io_pin_order.yaml, the BEL .json and the whole macro/ directory.
+# generate_custom_tile_config silently skips if ANY .csv survives under the tile dir
+# (including macro/final_views/metrics.csv from a previous harden).
+FABulous --project-dir fabric_sc_proj run "generate_custom_tile_config Tile/<Name>"
+```
+
+This writes `Tile/<Name>/<Name>.csv`, `<Name>_generated_switch_matrix.list` (based on the `LUT4AB`
+switch matrix, so routing stays uniform) and updates `user_design/custom_prims.v` (see Stage 5).
+Don't hand-edit the tile CSV's carry line. While the CSV says `MATRIX,GENERATE`, the `.list` is
+regenerated on every `generate_custom_tile_config` and `run_FABulous_fabric`, so edits to it are
+lost, and the switch-matrix `.csv` is always rebuilt from the `.list`.
+
+To hand-tune the routing, change `MATRIX,GENERATE` to
+`MATRIX,./<Name>_generated_switch_matrix.list`. After that the list stops regenerating and is yours
+to edit. List lines are `<output>,<input>`, several lines for one output make a mux, and
+`[a|b]`, `{N}` and `INCLUDE` are shorthand. Note that if the list is edited by hand, re-running
+`generate_custom_tile_config` no longer updates it when the BELs change.
+
+Add `Tile/<Name>/gds_config.yaml` with `DIE_AREA: [0, 0, 246, 245]` (the standard single-tile
+footprint, which keeps pin alignment with the other tiles). Copy `docs/issue-22/stb-eio-fabric-integration/source/STB/gds_config.yaml` as a starting point.
+If the logic does not fit, size it with `--optimise balance`, then verify at the real footprint
+with a `no_opt` harden.
+
+### Stage 3 — Place the tile in the fabric and regenerate the model
+
+Edit `fabric.csv`: put the tile in the grid and add it to the tile-inclusion list at the bottom.
+Then:
+
+```bash
+FABulous --project-dir fabric_sc_proj run "run_pyscript $(pwd)/fabric_sc_proj/build_fabric.py"
+```
+
+Use `run_pyscript` with an **absolute** path. The documented `script` command treats a `.py` file as
+Tcl in this fork, and a relative path is not resolved against the project directory.
+
+**Edge-IO tiles are not text-mirrors.** If you mirror `W_IO` into an east-edge tile, keep the
+reference tile's direction-line **block order**. A pin's Y-slot comes from declaration order, not
+from the `WEST`/`EAST` keyword or the port name. A name-only mirror shorts two drivers together
+and shows up only at fabric-stitch LVS. Reference: `docs/issue-22/stb-eio-fabric-integration/`.
+
+### Stage 4 — Harden the tile alone, then read the metrics
+
+```bash
+FABulous --project-dir fabric_sc_proj run "gen_tile_macro <Name>"
+```
+
+Do not trust the pass/fail line alone. Check that `design__lvs_error__count`,
+`route__drc_errors`, `klayout__drc_error__count`, `antenna__violating__nets`,
+`design__disconnected_pin__count` and `design__critical_disconnected_pin__count` are all `0`
+and that the manufacturability report shows Antenna/LVS/DRC `Passed`. Also grep the post-PnR STA
+`checks.rpt` at the worst corner (see the max-slew gotcha below).
+
+### Stage 5 — Make yosys and nextpnr see the primitive
+
+- **nextpnr:** nothing to do by hand. The model (`bel.txt`, `pips.txt`) is written during fabric
+  generation (`gen_model`, part of `run_FABulous_fabric`), so regenerate the fabric after any tile
+  change and the new BEL appears in `.FABulous/bel.txt`.
+- **yosys:** `generate_custom_tile_config` adds a blackbox of the BEL to
+  `user_design/custom_prims.v`, with every vector unrolled to single-bit ports (`binary_in0`,
+  `binary_in1`, …) and `UserCLK` renamed `CLK`. The `Test/Makefile` passes it as
+  `-extra-plib` automatically. Run yosys by hand and you must pass it yourself:
+  `yosys -p "synth_fabulous -top <top> -json out.json -extra-plib user_design/custom_prims.v" ...`.
+- **User design:** instantiate the primitive by its module name with the unrolled port names (see
+  `fabric_sc_proj/user_design/bts_test.v`, which instantiates `FABulous_binary_stochastic_converter_sync`).
+  Without a techmap yosys treats it as a blackbox and won't optimize through it. A techmap is
+  optional and only needed for yosys to infer the BEL from plain RTL.
+- Clocked designs need `(* keep *) Global_Clock inst_clk (.CLK(clk));` in the top module.
+
+### Stage 6 — Simulate with the new tile in the fabric
+
+Do this before the multi-hour fabric harden. Map a design that exercises the tile through Flow A
+and run `Librelane_work/chip_wrapper/tools/run_shrunk_validation.sh`. The SMUL/SADD chain
+testbench (`user_design_shrunk/sc_multiply_chain_fabric_tb.v`) is the closest example. Grep the output
+for `PASS:`, because the sims exit 0 even on a FAIL display. Use Verilator 2-state for gate-level
+sims, since icarus X-locks on this netlist family.
+
+### Stage 7 — Harden every tile, then stitch the fabric
+
+```bash
+FABulous --project-dir fabric_sc_proj run "gen_fabric"
+FABulous --project-dir fabric_sc_proj run "gen_all_tile_macros --parallel"
+FABulous --project-dir fabric_sc_proj run "gen_fabric_macro"
+```
+
+If you run `gen_fabric_macro` by hand, apply `docs/issue-12/apply-fix.sh` first (the Flow B wrapper
+script does it for you). Expect hours and tens of GB of RAM at the stitch.
+
+Success is `Circuits match uniquely` with `design__lvs_device_difference__count`,
+`design__lvs_unmatched_device__count`, `design__lvs_unmatched_net__count` and
+`design__lvs_unmatched_pin__count` all `0`, and equal `Number of devices` / `Number of nets` on both
+sides. Ignore the long `Cell <Tile> (0) disconnected node` section in netgen's report, which is a
+benign per-macro listing. A real failure shows as a nonzero `unmatched_net`/`unmatched_pin` count.
+`unmatched_net: 1` counts *groups*, so it can hide hundreds of nets.
+
+The GDSII is under `Fabric/macro/final_views/gds/`.
+
+### Stage 8 — Record it
+
+1. Copy the new tile's `.csv`, BEL `.sv`, `gds_config.yaml`, switch-matrix `.list` (if
+   hand-authored) and the updated `fabric.csv` into `docs/issue-<n>/<name>/source/`, with a
+   `restore-tile-files.sh` modelled on `docs/issue-22/smul-sadd-fabric-integration/`.
+2. Add the result to `HANDOFF.md`, and any new failure mode to the wiki reusable lesson.
+3. If the fabric size or tile set changed, re-diff `rtl/efpga_top_caravel_bb.v` against the new
+   macro (Flow B's note) and re-run the chip-wrapper checks.
+
+### Limits of this flow
+
+- Stage 0's on-FPGA check validates the RTL on 7-series, not the FABulous wrapper or the sky130
+  netlist. Gate-level simulation of the hardened fabric is the check that covers those.
+- The `.lib` timing models for the hardened macros are tracked in issue #21, so timing signoff is
+  not part of this flow yet.
+
+### Root-cause writeups behind these steps
+
+- `docs/issue-22/tile-macro-sv-glob-fix/` — `.sv` files dropped from tile hardening.
+- `docs/issue-22/bts-carry-chain-fix/` — dummy `CARRY` for tiles with no carry chain.
+- `docs/issue-22/stb-eio-fabric-integration/` — edge-IO mirroring and direction-line block order.
+- `docs/issue-22/smul-sadd-fabric-integration/` — the same methodology applied cleanly the first
+  time.
+- `docs/issue-12/root-cause.md` — fabric-stitch IO-placement fix.
+
+---
+
 ## Flow C — Standalone sky130 synthesis smoke (no fabric, no P&R)
 
 For a quick area/gate-count datapoint on one RTL module, no fabric or PnR involved —
@@ -263,9 +449,9 @@ grep -A20 "report_check_types -max_slew -max_cap -max_fanout -violators" \
 See the **Known gotchas** section below for a real max-slew-at-worst-corner failure this exact
 check caught, and its fix.
 
-## Environment setup (Flow B and D — Flows A and C don't need this)
+## Environment setup (Flows B, D and E — Flows A and C don't need this)
 
-Flow B needs LibreLane + the sky130A PDK via Nix. Flows A and C only need the plain
+Flows B, D and E need LibreLane + the sky130A PDK via Nix. Flows A and C only need the plain
 `oss-cad-suite` binaries (`yosys`, `nextpnr-generic`, `bit_gen`, `iverilog`), already on
 `PATH` via the exports above — no Nix, no PDK fetch.
 
