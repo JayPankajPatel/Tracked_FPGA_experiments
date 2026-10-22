@@ -1,24 +1,38 @@
 """Issue #33 / A2: fault tolerance of an 8-bit SC multiply vs binary multipliers.
 
-SC path: two BTS (LFSR seeds 1 and 204, the chain seeds) -> AND -> popcount over
-N=256 cycles. LFSR is the galois WIDTH=8 one from accuracy_and_correlation_sweep.py
-(pylfsr, TAPS_LUT[8]); its next-state table is built once and reused.
-Binary path: 8x8 -> 16-bit product, read as product/256 so both land on 0..255.
+SC path follows the RTL (sc_multiply_chain_top_sync / fused SCMUL tile): two BTS
+(galois LFSR WIDTH=8, seeds 1 and 204), stream bit = (state <= value) with the
+compare done before the LFSR advances, AND, ones-count over N=255 cycles.
+Binary path: 8x8 -> 16-bit product. Both are scored against ideal a*b/255 on a
+0..255 scale (binary reads its product as product/255).
 
-Error = |output - a*b/256| in percent of full scale (256), mean over random (a, b).
-Per-bit flip probability p is applied once per *stored/transmitted bit per operation*.
-Fault locations are reported separately (this is the pessimistic-review requirement):
-  sc_stream  flips on the two input streams and the product stream (256 bits each)
-  sc_inreg   flips on the 8-bit a and b registers feeding the BTS (binary-like)
-  sc_lfsr    flips on the 8 state bits of each LFSR, at a random cycle
-  bin_raw    flips on a, b (8 bits each) and the 16-bit product, unprotected
-  bin_parity product parity, detect-only, one recompute on detect
-  bin_tmr    three independent copies of bin_raw, bitwise majority voter (voter fault-free)
-Flip models: "uniform" (independent bits) and "burst" (runs of 8 adjacent bits, the
-expected number of flipped bits is kept at p x bits).
+Error = |output - a*b/255| in percent of full scale (255), mean and p99 over random (a, b).
 
-Run: python3 fault_tolerance_sweep.py
-Output: results/fault_tolerance.csv
+SC fault locations (each also reported separately):
+  sc_stream  flips on the a, b and product streams (one bit per cycle each)
+  sc_inreg   the two 8-bit registers holding a and b during the burst (BTS binary_in_d)
+  sc_lfsr    the 8 state bits of each LFSR
+  sc_cnt     the 8-bit ones-count register in the STB
+  sc_all     all four at once (the whole multiplier is faulty)
+  sc_tmr_out three complete copies, all locations faulty, bitwise vote on the final count
+  sc_shield  streams and LFSR state unprotected; the a/b registers and the count register are
+             triplicated with a voter that rewrites the voted value every cycle, so a bit is
+             wrong only if two copies flip in the same cycle (p_eff = 3p^2 - 2p^3 per cycle)
+  sc_shield_all  as sc_shield but the LFSR state bits are scrubbed-TMR too; only the streams
+             themselves are unprotected (40 state bits triplicated)
+  sc_tmr_ideal  three copies voting on the product *stream*, registers/LFSR/counter assumed
+                fault-free (optimistic upper bound)
+Binary: bin_raw, bin_parity (product parity, detect + one recompute), bin_tmr (3 copies,
+bitwise vote on the product, operand registers faulty per copy).
+
+Exposure conventions for flip probability p:
+  per_op     every stored bit sees p once per operation (stream bits p each); SC registers get
+             p/255 per cycle so the expected flips per operation match binary's
+  per_cycle  every bit sees p on every clock. SC registers are held for 255 cycles; binary does
+             the whole multiply in one cycle. This is the physically motivated one.
+Flip models: "uniform" and "burst" (runs of 8 adjacent bits; streams and binary words only).
+
+Run: python3 fault_tolerance_sweep.py     Output: results/fault_tolerance.csv
 """
 
 import csv
@@ -27,14 +41,15 @@ import os
 import numpy as np
 from pylfsr import LFSR
 
-from accuracy_and_correlation_sweep import TAPS_LUT, fpoly_for, state_to_int
+from accuracy_and_correlation_sweep import fpoly_for, state_to_int
 
 W = 8
-N = 256
+N = 255
 SEED_A, SEED_B = 1, 204
-TRIALS = 4000
+TRIALS = 3000
 BURST = 8
-RATES = [0.01, 0.02, 0.05, 0.10, 0.15]
+PER_OP = [0.01, 0.02, 0.05, 0.10, 0.15]
+PER_CYCLE = [1e-5, 1e-4, 3e-4, 1e-3, 3e-3]
 rng = np.random.default_rng(33)
 
 
@@ -51,23 +66,10 @@ def build_next():
 NEXT = build_next()
 
 
-def lfsr_states(seed, flips=None):
-    """States over N cycles for each trial. flips: (cycle[T], bit[T], active[T]) or None."""
-    t = seed if np.ndim(seed) else np.full(TRIALS, seed, dtype=np.int64)
-    out = np.empty((N, TRIALS), dtype=np.int64)
-    s = t.copy()
-    for c in range(N):
-        if flips is not None:
-            cyc, bit, act = flips
-            hit = act & (cyc == c)
-            s = np.where(hit, s ^ (1 << bit), s)
-        out[c] = s
-        s = NEXT[s]
-    return out
-
-
 def flip_mask(shape_bits, p, model):
-    """Boolean flip mask [TRIALS, shape_bits]. Same expected flips per row for both models."""
+    """Boolean flip mask [TRIALS, shape_bits]; burst keeps the same expected flips per row."""
+    if p == 0:
+        return np.zeros((TRIALS, shape_bits), dtype=bool)
     if model == "uniform":
         return rng.random((TRIALS, shape_bits)) < p
     m = np.zeros((TRIALS, shape_bits), dtype=bool)
@@ -79,6 +81,13 @@ def flip_mask(shape_bits, p, model):
     return m
 
 
+def reg_flip(p):
+    """Per-cycle flips of an 8-bit register, as an XOR mask [TRIALS]."""
+    if p == 0:
+        return 0
+    return ((rng.random((TRIALS, 8)) < p).astype(np.int64) << np.arange(8)).sum(axis=1)
+
+
 def bits_of(x, n):
     return ((x[:, None] >> np.arange(n)) & 1).astype(bool)
 
@@ -87,92 +96,100 @@ def val_of(b):
     return (b.astype(np.int64) << np.arange(b.shape[1])).sum(axis=1)
 
 
-def sc_multiply(a, b, loc, p, model):
-    if loc == "sc_inreg":
-        fa = flip_mask(W, p, model)
-        fb = flip_mask(W, p, model)
-        a = val_of(bits_of(a, W) ^ fa)
-        b = val_of(bits_of(b, W) ^ fb)
-    fl_a = fl_b = None
-    if loc == "sc_lfsr":
-        def mk():
-            m = flip_mask(W, p, model)  # one chance per state bit
-            act = m.any(axis=1)
-            bit = np.where(act, m.argmax(axis=1), 0)
-            return rng.integers(0, N, TRIALS), bit, act
-        fl_a, fl_b = mk(), mk()
-    sa = lfsr_states(SEED_A, fl_a) < a[None, :]
-    sb = lfsr_states(SEED_B, fl_b) < b[None, :]
-    prod = (sa & sb).T
-    if loc == "sc_stream":
-        sa = sa ^ flip_mask(N, p, model).T
-        sb = sb ^ flip_mask(N, p, model).T
-        prod = (sa & sb).T ^ flip_mask(N, p, model)
-    return prod.sum(axis=1).astype(float)
+def sc_run(a, b, rates, model):
+    """One SC multiplier; rates = per-cycle p for stream / reg / lfsr / cnt. Returns 8-bit count."""
+    ps, pr, pl, pc = rates
+    fs = [flip_mask(N, ps, model) for _ in range(3)] if ps else None
+    sa = np.full(TRIALS, SEED_A, dtype=np.int64)
+    sb = np.full(TRIALS, SEED_B, dtype=np.int64)
+    ra, rb = a.copy(), b.copy()
+    cnt = np.zeros(TRIALS, dtype=np.int64)
+    for c in range(N):
+        ba = sa <= ra
+        bb = sb <= rb
+        if fs is not None:
+            ba = ba ^ fs[0][:, c]
+            bb = bb ^ fs[1][:, c]
+        bp = ba & bb
+        if fs is not None:
+            bp = bp ^ fs[2][:, c]
+        cnt = (cnt + bp) & 0xFF
+        if pr:
+            ra, rb = ra ^ reg_flip(pr), rb ^ reg_flip(pr)
+        if pl:
+            sa, sb = sa ^ reg_flip(pl), sb ^ reg_flip(pl)
+        if pc:
+            cnt = cnt ^ reg_flip(pc)
+        sa, sb = NEXT[sa], NEXT[sb]
+    return cnt
 
 
-def sc_tmr(a, b, p, model):
-    """Three copies, same seeds, independent stream faults, bitwise majority on product stream."""
-    base_a = lfsr_states(SEED_A) < a[None, :]
-    base_b = lfsr_states(SEED_B) < b[None, :]
+def sc_tmr_ideal(a, b, p, model):
+    base_a = np.empty((TRIALS, N), dtype=bool)
+    base_b = np.empty((TRIALS, N), dtype=bool)
+    sa = np.full(TRIALS, SEED_A, dtype=np.int64)
+    sb = np.full(TRIALS, SEED_B, dtype=np.int64)
+    for c in range(N):
+        base_a[:, c] = sa <= a
+        base_b[:, c] = sb <= b
+        sa, sb = NEXT[sa], NEXT[sb]
     copies = []
     for _ in range(3):
-        sa = base_a ^ flip_mask(N, p, model).T
-        sb = base_b ^ flip_mask(N, p, model).T
-        copies.append(((sa & sb).T ^ flip_mask(N, p, model)).astype(int))
-    maj = (copies[0] + copies[1] + copies[2]) >= 2
-    return maj.sum(axis=1).astype(float)
+        x = base_a ^ flip_mask(N, p, model)
+        y = base_b ^ flip_mask(N, p, model)
+        copies.append(((x & y) ^ flip_mask(N, p, model)).astype(int))
+    return ((copies[0] + copies[1] + copies[2]) >= 2).sum(axis=1).astype(float)
+
+
+def vote(vs, nbits):
+    bits = sum(bits_of(v, nbits).astype(int) for v in vs)
+    return val_of(bits >= 2)
 
 
 def bin_once(a, b, p, model):
-    fa, fb = flip_mask(W, p, model), flip_mask(W, p, model)
-    aa, bb = val_of(bits_of(a, W) ^ fa), val_of(bits_of(b, W) ^ fb)
-    prod = bits_of(aa * bb, 16) ^ flip_mask(16, p, model)
-    return prod
+    aa = val_of(bits_of(a, W) ^ flip_mask(W, p, model))
+    bb = val_of(bits_of(b, W) ^ flip_mask(W, p, model))
+    return bits_of(aa * bb, 16) ^ flip_mask(16, p, model)
 
 
-def bin_raw(a, b, p, model):
-    return val_of(bin_once(a, b, p, model)) / 256.0
-
-
-def bin_parity(a, b, p, model):
+def run_methods(a, b, p, model, conv):
+    s_reg = p / N if conv == "per_op" else p  # per-cycle p for held registers
+    out = {
+        "sc_stream": sc_run(a, b, (p, 0, 0, 0), model),
+        "sc_inreg": sc_run(a, b, (0, s_reg, 0, 0), model),
+        "sc_lfsr": sc_run(a, b, (0, 0, s_reg, 0), model),
+        "sc_cnt": sc_run(a, b, (0, 0, 0, s_reg), model),
+        "sc_all": sc_run(a, b, (p, s_reg, s_reg, s_reg), model),
+        "sc_shield": sc_run(a, b, (p, 3 * s_reg**2 - 2 * s_reg**3, s_reg,
+                                   3 * s_reg**2 - 2 * s_reg**3), model),
+        "sc_shield_all": sc_run(a, b, (p, 3 * s_reg**2 - 2 * s_reg**3, 3 * s_reg**2 - 2 * s_reg**3,
+                                       3 * s_reg**2 - 2 * s_reg**3), model),
+        "sc_tmr_out": vote([sc_run(a, b, (p, s_reg, s_reg, s_reg), model) for _ in range(3)], 8),
+        "sc_tmr_ideal": sc_tmr_ideal(a, b, p, model),
+    }
+    out = {k: v.astype(float) for k, v in out.items()}
     prod = bin_once(a, b, p, model)
-    # parity of the true product is held in a fault-free-at-compute side bit; a flip of
-    # that bit is ignored (kindest case for parity)
-    true_par = ((a * b)[:, None] >> np.arange(16) & 1).sum(axis=1) & 1
+    out["bin_raw"] = val_of(prod) / 255.0
+    true_par = (bits_of(a * b, 16).sum(axis=1)) & 1
     bad = (prod.sum(axis=1) & 1) != true_par
-    prod2 = bin_once(a, b, p, model)
-    out = np.where(bad[:, None], prod2, prod)
-    return val_of(out) / 256.0
-
-
-def bin_tmr(a, b, p, model):
-    c = [bin_once(a, b, p, model) for _ in range(3)]
-    maj = (c[0].astype(int) + c[1] + c[2]) >= 2
-    return val_of(maj) / 256.0
-
-
-METHODS = {
-    "sc_stream": lambda a, b, p, m: sc_multiply(a, b, "sc_stream", p, m),
-    "sc_inreg": lambda a, b, p, m: sc_multiply(a, b, "sc_inreg", p, m),
-    "sc_lfsr": lambda a, b, p, m: sc_multiply(a, b, "sc_lfsr", p, m),
-    "sc_tmr": sc_tmr,
-    "bin_raw": bin_raw,
-    "bin_parity": bin_parity,
-    "bin_tmr": bin_tmr,
-}
+    out["bin_parity"] = val_of(np.where(bad[:, None], bin_once(a, b, p, model), prod)) / 255.0
+    out["bin_tmr"] = vote([val_of(bin_once(a, b, p, model)) for _ in range(3)], 16) / 255.0
+    return out
 
 
 def main():
     a = rng.integers(0, 256, TRIALS)
     b = rng.integers(0, 256, TRIALS)
-    ideal = a * b / 256.0
+    ideal = a * b / 255.0
     rows = []
-    for model in ("uniform", "burst"):
-        for p in [0.0] + RATES:
-            row = {"model": model, "p": p}
-            for name, fn in METHODS.items():
-                err = np.abs(fn(a, b, p, model) - ideal) / 256.0 * 100
+    plan = [("per_op", "uniform", PER_OP), ("per_op", "burst", PER_OP),
+            ("per_cycle", "uniform", PER_CYCLE)]
+    for conv, model, rates in plan:
+        for p in [0.0] + rates:
+            row = {"convention": conv, "model": model, "p": p}
+            res = run_methods(a, b, p, model, conv)
+            for name, v in res.items():
+                err = np.abs(v - ideal) / 255.0 * 100
                 row[name + "_mean"] = round(float(err.mean()), 3)
                 row[name + "_p99"] = round(float(np.percentile(err, 99)), 3)
             rows.append(row)
@@ -181,14 +198,15 @@ def main():
         w = csv.DictWriter(f, fieldnames=list(rows[0]))
         w.writeheader()
         w.writerows(rows)
-    names = list(METHODS)
-    print("mean |err| %FS   (p99 in brackets)")
-    for model in ("uniform", "burst"):
-        print(f"\n[{model}]  p      " + "  ".join(f"{n:>16}" for n in names))
+    names = [k[:-5] for k in rows[0] if k.endswith("_mean")]
+    print("mean |err| %FS (p99)")
+    for conv, model, _ in plan:
+        print(f"\n[{conv} / {model}]")
+        print(f"{'p':>8} " + " ".join(f"{n:>13}" for n in names))
         for r in rows:
-            if r["model"] == model:
-                print(f"        {r['p']:<5} " + "  ".join(
-                    f"{r[n + '_mean']:>8.2f} ({r[n + '_p99']:>5.1f})" for n in names))
+            if r["convention"] == conv and r["model"] == model:
+                print(f"{r['p']:>8g} " + " ".join(
+                    f"{r[n + '_mean']:>6.2f}({r[n + '_p99']:>5.1f})" for n in names))
 
 
 if __name__ == "__main__":

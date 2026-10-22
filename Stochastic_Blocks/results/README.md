@@ -96,44 +96,46 @@ solved problem, and it needs an explicit phase/polynomial-separation
 strategy — not "pick any two non-equal seeds" — before this arm's accuracy
 numbers can be trusted for the four-arm comparison.
 
-## Fault tolerance (issue #33, A2)
+## Fault tolerance (issue #33, A2) - revised
 
-`tb/fault_tolerance_sweep.py` -> `fault_tolerance.csv`. WIDTH=8 AND-multiply
-(seeds 1 and 204, N=256) vs unprotected / parity / TMR 8x8 binary. Error is mean
-|out - a*b/256| in % of full scale over 4000 random (a, b). Flip probability p is
-per stored/transmitted bit per operation, uniform and 8-bit-burst models.
+`tb/fault_tolerance_sweep.py` -> `fault_tolerance.csv`. WIDTH=8 AND-multiply on the RTL
+convention (seeds 1 and 204, `<=`, 255 cycles) vs 8x8 binary (raw, parity, TMR), mean
+|out - a*b/255| in % of full scale (p99 in brackets), 3000 random (a, b). Fault locations
+are modelled separately: the three streams, the a/b registers, the two LFSR states and the STB
+ones-count register. An earlier version of this section left the count register out and
+reported SC ahead; that result was wrong and is superseded by this one.
 
-Mean error, uniform flips:
+Per-bit flip probability p, uniform flips. `per_op`: each stored bit sees p once per operation
+(stream bits p each). `per_cycle`: every bit sees p every clock; SC state is held for 255 cycles,
+binary multiplies in one.
 
-| p | SC stream | SC input reg | SC LFSR state | binary | binary + parity | binary TMR |
-|---|---|---|---|---|---|---|
-| 0 | 0.41 | 0.41 | 0.41 | 0.00 | 0.00 | 0.00 |
-| 0.01 | 1.04 | 1.27 | 0.50 | 1.90 | 1.02 | 0.22 |
-| 0.05 | 4.60 | 4.68 | 0.79 | 8.20 | 7.97 | 4.20 |
-| 0.10 | 8.81 | 8.25 | 1.07 | 14.40 | 14.68 | 9.79 |
-| 0.15 | 12.50 | 11.16 | 1.25 | 18.99 | 19.71 | 14.65 |
+| convention | p | SC, all faulty | SC, state TMR-scrubbed | binary | binary TMR |
+|---|---|---|---|---|---|
+| per_op | 0.01 | 2.61 (49.0) | 1.11 (3.6) | 2.20 (50.4) | 0.28 (8.0) |
+| per_op | 0.05 | 10.40 (60.2) | 4.80 (12.0) | 8.77 (54.6) | 4.33 (50.4) |
+| per_op | 0.10 | 17.49 (75.0) | 8.94 (20.5) | 14.77 (72.7) | 9.65 (56.6) |
+| per_cycle | 1e-4 | 4.04 (50.7) | 0.30 (1.0) | 0.00 (0.0) | 0.00 (0.0) |
+| per_cycle | 1e-3 | 21.49 (80.7) | 0.45 (2.1) | 0.23 (3.2) | 0.01 (0.0) |
+| per_cycle | 3e-3 | 32.57 (91.9) | 1.58 (34.6) | 0.55 (17.3) | 0.05 (0.0) |
 
-Reading: SC beats unprotected binary at every p >= 1% on the mean, and beats TMR
-binary only at p >= 10% (about 10-15% lower). TMR wins clearly at p <= 2%. SC's
-advantage is the tail: p99 error at p = 0.10 is 19.9 %FS for stream flips vs 55.9
-(binary) and 55.9 (TMR). Flips in the 8-bit input registers are binary-style and
-give SC a binary-sized tail (p99 23-58 %FS), so those registers need protection.
-Parity as modelled (detect + one recompute) is a weak baseline. The SC LFSR-state
-column is low only because that location has just 16 bits of exposure per op.
+("state TMR-scrubbed" = a/b registers, both LFSR states and the count register triplicated
+with a voter rewriting the voted value each cycle, 40 bits; only the streams are bare.)
 
-Caveats: the per-bit convention exposes SC to 768 stream bits against 32 binary
-bits per op, but binary is only exposed for one cycle and SC for 256, so a
-per-cycle rate would shift the comparison. Rates of 1-15% are far above real
-soft-error rates; this shows scaling, not a field-failure claim. Area: SC multiply
-is about 1.7x the DSP supertile, TMR is about 3x.
+Reading:
+- A whole SC multiplier with unprotected state is **worse than unprotected binary** under both
+  conventions. Stream flips alone are benign (0.36 %FS at per-cycle p = 1e-3), but the a/b
+  registers, the LFSR states and above all the count register are binary-style state, held for
+  255 cycles; a count MSB flip is a 128-count error.
+- With the converter state protected, SC matches unprotected binary on the mean under `per_op`
+  and has a far smaller tail (p99 20 vs 73 %FS at p = 0.10). It does **not** beat binary TMR on
+  the mean at low p (tie at p >= 0.10), and under `per_cycle` binary wins outright.
+- So fault tolerance is not a general SC advantage on this implementation. It holds when the
+  faults land on the stream wires and the state is protected, which is the regime for noisy
+  or device-level streams, not for flip-flop upsets.
 
-SC + TMR (added after review): three copies with identical seeds, independent
-stream faults, bitwise majority on the product stream (voter and input registers
-assumed fault-free). Mean error uniform flips: p=0.01 0.43, 0.02 0.53, 0.05 1.35,
-0.10 4.02, 0.15 7.38 %FS; p99 at 0.10 is 13.2 vs 54.1 for TMR binary. It beats
-TMR binary from about p=0.02 up and on the tail at every p, but costs about 5x the
-DSP supertile against 3x, so it is not area-matched. Identical seeds are required:
-voting independent streams would distort the value (3p^2 - 2p^3).
+Caveats: flip rates of 1e-5 to 0.15 are not field soft-error rates; scrubbed TMR is modelled
+as p_eff = 3p^2 - 2p^3 per cycle; area for the 40 extra state bits (about 80 flops plus
+voters) is not measured; configuration-memory upsets are out of scope.
 
 ## Fused SC multiply tile (issue #33, A1)
 
@@ -154,8 +156,23 @@ disconnected-pin all 0.
 | **fused SC multiply tile** | **26,540** | **60,413** | **0.49x / 0.49x** |
 | fused x3 (TMR, voter not included) | 79,620 | 181,239 | 0.49x of DSP TMR |
 
-Not yet checked: setup/hold/slew (the tile flow reported no timing metrics, and BTS
-alone failed max-slew at the slow corner before), the fused tile placed and run
-inside a fabric, the TMR voter, and the DSP's operand width (it is a MAC).
-Note: this sweep's golden model uses `<` over 256 cycles while the RTL uses `<=`
-over 255; the fault sweep should be rerun on the RTL convention.
+Fabric functional check (`docs/issue-33-fused-tile/`): the tile placed in a 14x10 fabric
+(scratch project `fabric_scmul_proj`), yosys -> nextpnr -> bitstream -> fabric RTL sim, 24 operand
+pairs matched the RTL cycle for cycle; a deliberately broken gold produces MISMATCH. This is the
+generated fabric RTL, not the hardened fabric.
+
+Timing (OpenSTA on the tile's final netlist + SPEF, 20 ns constraint with the tile-boundary I/O
+delays; the FABulous tile flow does not gate on setup/slew, `MAX_SLEW_VIOLATION_CORNERS` is empty):
+
+| | tt setup WS | ss setup WS | ss reg-to-reg WS | ss slew violators (internal / ports) |
+|---|---|---|---|---|
+| SCMUL (fused) | +3.93 ns | -5.12 ns | +2.60 ns | 1479 / 1119 |
+| BTS | +4.02 ns | -4.42 ns | +3.27 ns | 1538 / 1395 |
+
+The fused tile is within about 0.7 ns of BTS everywhere and has the same violation profile
+(tile-boundary paths and switch-matrix / config nets), and BTS stitched clean. This is no worse
+than BTS, not a pass: ss tile-boundary setup misses at 20 ns, so the achievable period at ss is
+about 25 ns (40 MHz) until fabric-level timing (issue #21) is characterised.
+
+Not yet checked: the TMR voter, the 40 extra state bits that make the multiply fault-tolerant
+(see above), the hardened fabric containing the tile, and the DSP's operand width (it is a MAC).
