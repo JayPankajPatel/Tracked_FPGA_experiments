@@ -157,7 +157,7 @@ disconnected-pin all 0.
 | fused x3 (TMR, voter not included) | 79,620 | 181,239 | 0.49x of DSP TMR |
 
 Fabric functional check (`docs/issue-33-fused-tile/`): the tile placed in a 14x10 fabric
-(scratch project `fabric_scmul_proj`), yosys -> nextpnr -> bitstream -> fabric RTL sim, 24 operand
+(scratch project `fabric_sc_fused_proj`), yosys -> nextpnr -> bitstream -> fabric RTL sim, 24 operand
 pairs matched the RTL cycle for cycle; a deliberately broken gold produces MISMATCH. This is the
 generated fabric RTL, not the hardened fabric.
 
@@ -174,5 +174,9 @@ The fused tile is within about 0.7 ns of BTS everywhere and has the same violati
 than BTS, not a pass: ss tile-boundary setup misses at 20 ns, so the achievable period at ss is
 about 25 ns (40 MHz) until fabric-level timing (issue #21) is characterised.
 
+Stitched fabric (`fabric_sc_fused_proj`, 14x10, fused tile in column 1): `gen_fabric_macro` 4 min 50 s,
+LVS "Circuits match uniquely", all LVS / DRC / antenna / disconnected-pin metrics 0, die
+2478.02 x 3930.40 um (9.74 mm^2, same footprint as the BTS+STB fabric).
+
 Not yet checked: the TMR voter, the 40 extra state bits that make the multiply fault-tolerant
-(see above), the hardened fabric containing the tile, and the DSP's operand width (it is a MAC).
+(see above), gate-level simulation of the stitched macro, and the DSP's operand width (it is a MAC).

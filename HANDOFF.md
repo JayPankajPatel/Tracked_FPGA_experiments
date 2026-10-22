@@ -20,14 +20,16 @@
 **Commands run:** `generate_custom_tile_config <abs path>`, `gen_tile`, `gen_tile_macro SCMUL`, OpenSTA per corner, fabric sim via
 `make sim DESIGN=scmul_test TOP_WRAPPER=top_wrapper_scmul`, `Stochastic_Blocks/tb/fault_tolerance_sweep.py`.
 
+**Fabric stitch:** `fabric_sc_fused_proj` (fused tile in the 14x10 grid) stitched clean in 4m50s, LVS match, all metrics 0.
+
 **Local state changed (gitignored):** `fabric_sc_proj` gained `Tile/SCMUL` and one `Tile,` line in `fabric.csv` (not in the grid);
-earlier SMUL/SADD removal still applies. Scratch sim project `fabric_scmul_proj` (no macros). Backups in the session scratchpad.
+earlier SMUL/SADD removal still applies. Scratch sim project `fabric_sc_fused_proj` (no macros). Backups in the session scratchpad.
 
 **Gotchas found:** `generate_custom_tile_config` needs an absolute tile path and the tile must not already be in `fabric.csv`;
 do not put oss-cad-suite first on PATH for hardening (its yosys lacks `-y`); the FABulous tile flow reports no setup/slew metrics, run STA yourself.
 
 **Open:** TMR voter + area of the 40 shield bits; 8-bit output (tile output limit forces 7); stream-port variant for chains (wiki
-chain-optimization note); A3; DSP operand width; hardened fabric containing SCMUL; the SC fault result suggests the ReRAM/noisy-stream
+chain-optimization note); A3; DSP operand width; gate-level sim of the stitched fabric; the SC fault result suggests the ReRAM/noisy-stream
 angle is where stream robustness actually applies.
 
 **Next recommended action:** build the fault-shielded fused tile (40 triplicated state bits + voters) and measure its area; then A3.
