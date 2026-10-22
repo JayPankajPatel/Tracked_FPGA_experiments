@@ -95,3 +95,34 @@ non-negligible design constraint for the LFSR-SC baseline arm, not a
 solved problem, and it needs an explicit phase/polynomial-separation
 strategy — not "pick any two non-equal seeds" — before this arm's accuracy
 numbers can be trusted for the four-arm comparison.
+
+## Fault tolerance (issue #33, A2)
+
+`tb/fault_tolerance_sweep.py` -> `fault_tolerance.csv`. WIDTH=8 AND-multiply
+(seeds 1 and 204, N=256) vs unprotected / parity / TMR 8x8 binary. Error is mean
+|out - a*b/256| in % of full scale over 4000 random (a, b). Flip probability p is
+per stored/transmitted bit per operation, uniform and 8-bit-burst models.
+
+Mean error, uniform flips:
+
+| p | SC stream | SC input reg | SC LFSR state | binary | binary + parity | binary TMR |
+|---|---|---|---|---|---|---|
+| 0 | 0.41 | 0.41 | 0.41 | 0.00 | 0.00 | 0.00 |
+| 0.01 | 1.04 | 1.27 | 0.50 | 1.90 | 1.02 | 0.22 |
+| 0.05 | 4.60 | 4.68 | 0.79 | 8.20 | 7.97 | 4.20 |
+| 0.10 | 8.81 | 8.25 | 1.07 | 14.40 | 14.68 | 9.79 |
+| 0.15 | 12.50 | 11.16 | 1.25 | 18.99 | 19.71 | 14.65 |
+
+Reading: SC beats unprotected binary at every p >= 1% on the mean, and beats TMR
+binary only at p >= 10% (about 10-15% lower). TMR wins clearly at p <= 2%. SC's
+advantage is the tail: p99 error at p = 0.10 is 19.9 %FS for stream flips vs 55.9
+(binary) and 55.9 (TMR). Flips in the 8-bit input registers are binary-style and
+give SC a binary-sized tail (p99 23-58 %FS), so those registers need protection.
+Parity as modelled (detect + one recompute) is a weak baseline. The SC LFSR-state
+column is low only because that location has just 16 bits of exposure per op.
+
+Caveats: the per-bit convention exposes SC to 768 stream bits against 32 binary
+bits per op, but binary is only exposed for one cycle and SC for 256, so a
+per-cycle rate would shift the comparison. Rates of 1-15% are far above real
+soft-error rates; this shows scaling, not a field-failure claim. Area: SC multiply
+is about 1.7x the DSP supertile, TMR is about 3x.
