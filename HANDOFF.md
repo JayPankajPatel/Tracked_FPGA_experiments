@@ -1,5 +1,39 @@
 # HANDOFF
 
+## 2026-10-21 - Issue #33: where does stochastic computing beat hardened binary? (A1 / A2 / A3)
+
+**Branch:** `feature/33-sc-advantage-angles` (from `main`).
+
+**Goal:** test three SC advantages at equal accuracy (WIDTH=8): A1 amortization/area, A2 fault tolerance, A3 progressive precision.
+
+**Results so far:**
+- **A1 (area) - strong.** One fused BEL (BTS+BTS+AND+STB, 7-bit product) hardens in one tile: **26,540 um^2 std-cell**, 60,413 um^2
+  footprint, LVS/DRC/antenna 0 -> **0.49x the classic DSP supertile** (53,722 / 122,858), vs 1.7x / 2.0x for the 4-tile build.
+  The tile cost is ~20k um^2 of switch matrix + config memory; the multiply logic is ~5.7k. Equivalent to the RTL chain on 406 operand
+  pairs; works through the fabric (yosys->nextpnr->bitstream->RTL sim, 24 pairs, negative control fires). Timing (OpenSTA) is within
+  0.7 ns of BTS; ss tile-boundary setup misses at 20 ns like BTS (fabric-level timing = issue #21).
+- **A2 (fault tolerance) - negative as built.** An earlier positive result was wrong (the STB count register was not faulted). With all
+  state faulted SC is worse than unprotected binary; with the 40 converter-state bits scrubbed-TMR'd it ties binary on the mean and has a
+  much smaller tail under per-op flips, and loses to binary under per-cycle flips. SC robustness holds for stream-wire faults only.
+- **A3 (progressive precision):** not started.
+
+**Commands run:** `generate_custom_tile_config <abs path>`, `gen_tile`, `gen_tile_macro SCMUL`, OpenSTA per corner, fabric sim via
+`make sim DESIGN=scmul_test TOP_WRAPPER=top_wrapper_scmul`, `Stochastic_Blocks/tb/fault_tolerance_sweep.py`.
+
+**Fabric stitch:** `fabric_sc_fused_proj` (fused tile in the 14x10 grid) stitched clean in 4m50s, LVS match, all metrics 0.
+
+**Local state changed (gitignored):** `fabric_sc_proj` gained `Tile/SCMUL` and one `Tile,` line in `fabric.csv` (not in the grid);
+earlier SMUL/SADD removal still applies. Scratch sim project `fabric_sc_fused_proj` (no macros). Backups in the session scratchpad.
+
+**Gotchas found:** `generate_custom_tile_config` needs an absolute tile path and the tile must not already be in `fabric.csv`;
+do not put oss-cad-suite first on PATH for hardening (its yosys lacks `-y`); the FABulous tile flow reports no setup/slew metrics, run STA yourself.
+
+**Open:** TMR voter + area of the 40 shield bits; 8-bit output (tile output limit forces 7); stream-port variant for chains (wiki
+chain-optimization note); A3; DSP operand width; gate-level sim of the stitched fabric; the SC fault result suggests the ReRAM/noisy-stream
+angle is where stream robustness actually applies.
+
+**Next recommended action:** build the fault-shielded fused tile (40 triplicated state bits + voters) and measure its area; then A3.
+
 ## 2026-10-14 — Issue #27: on-hardware validation of every stochastic block (Zybo Z7-10)
 
 **Branch:** `feature/27-zybo-hw-validation` (worktree `../Tracked_FPGA_experiments_hwval`, branched from `origin/main`;
