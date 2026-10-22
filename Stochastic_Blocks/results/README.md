@@ -134,3 +134,28 @@ assumed fault-free). Mean error uniform flips: p=0.01 0.43, 0.02 0.53, 0.05 1.35
 TMR binary from about p=0.02 up and on the tail at every p, but costs about 5x the
 DSP supertile against 3x, so it is not area-matched. Identical seeds are required:
 voting independent streams would distort the value (3p^2 - 2p^3).
+
+## Fused SC multiply tile (issue #33, A1)
+
+`rtl/fused/` holds a single BEL containing BTS(a) + BTS(b) + AND + STB with the
+handshakes internal (seeds 1 and 204, 7-bit product because a tile allows at most
+8 BEL outputs and `valid_out` takes one). `tb_fused_equiv.sv` checks it against the
+validated `sc_multiply_chain_top_sync`: 406 operand pairs, 0 mismatches
+(`product == chain_out >> 1`).
+
+Hardened alone in FABulous (`gen_tile_macro SCMUL`, sky130, standard 60,413 um^2
+tile): **26,540 um^2 std-cell**, 406 config bits (BTS: 390), LVS / DRC / antenna /
+disconnected-pin all 0.
+
+| | std-cell (um^2) | footprint (um^2) | vs DSP |
+|---|---|---|---|
+| DSP supertile | 53,722 | 122,858 | 1.00x |
+| 4-tile SC multiply (2 BTS + SMUL + STB) | 91,224 | 241,650 | 1.7x / 2.0x |
+| **fused SC multiply tile** | **26,540** | **60,413** | **0.49x / 0.49x** |
+| fused x3 (TMR, voter not included) | 79,620 | 181,239 | 0.49x of DSP TMR |
+
+Not yet checked: setup/hold/slew (the tile flow reported no timing metrics, and BTS
+alone failed max-slew at the slow corner before), the fused tile placed and run
+inside a fabric, the TMR voter, and the DSP's operand width (it is a MAC).
+Note: this sweep's golden model uses `<` over 256 cycles while the RTL uses `<=`
+over 255; the fault sweep should be rerun on the RTL convention.
