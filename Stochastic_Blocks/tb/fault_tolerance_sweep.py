@@ -111,6 +111,19 @@ def sc_multiply(a, b, loc, p, model):
     return prod.sum(axis=1).astype(float)
 
 
+def sc_tmr(a, b, p, model):
+    """Three copies, same seeds, independent stream faults, bitwise majority on product stream."""
+    base_a = lfsr_states(SEED_A) < a[None, :]
+    base_b = lfsr_states(SEED_B) < b[None, :]
+    copies = []
+    for _ in range(3):
+        sa = base_a ^ flip_mask(N, p, model).T
+        sb = base_b ^ flip_mask(N, p, model).T
+        copies.append(((sa & sb).T ^ flip_mask(N, p, model)).astype(int))
+    maj = (copies[0] + copies[1] + copies[2]) >= 2
+    return maj.sum(axis=1).astype(float)
+
+
 def bin_once(a, b, p, model):
     fa, fb = flip_mask(W, p, model), flip_mask(W, p, model)
     aa, bb = val_of(bits_of(a, W) ^ fa), val_of(bits_of(b, W) ^ fb)
@@ -143,6 +156,7 @@ METHODS = {
     "sc_stream": lambda a, b, p, m: sc_multiply(a, b, "sc_stream", p, m),
     "sc_inreg": lambda a, b, p, m: sc_multiply(a, b, "sc_inreg", p, m),
     "sc_lfsr": lambda a, b, p, m: sc_multiply(a, b, "sc_lfsr", p, m),
+    "sc_tmr": sc_tmr,
     "bin_raw": bin_raw,
     "bin_parity": bin_parity,
     "bin_tmr": bin_tmr,

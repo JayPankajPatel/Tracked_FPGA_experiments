@@ -126,3 +126,11 @@ bits per op, but binary is only exposed for one cycle and SC for 256, so a
 per-cycle rate would shift the comparison. Rates of 1-15% are far above real
 soft-error rates; this shows scaling, not a field-failure claim. Area: SC multiply
 is about 1.7x the DSP supertile, TMR is about 3x.
+
+SC + TMR (added after review): three copies with identical seeds, independent
+stream faults, bitwise majority on the product stream (voter and input registers
+assumed fault-free). Mean error uniform flips: p=0.01 0.43, 0.02 0.53, 0.05 1.35,
+0.10 4.02, 0.15 7.38 %FS; p99 at 0.10 is 13.2 vs 54.1 for TMR binary. It beats
+TMR binary from about p=0.02 up and on the tail at every p, but costs about 5x the
+DSP supertile against 3x, so it is not area-matched. Identical seeds are required:
+voting independent streams would distort the value (3p^2 - 2p^3).
